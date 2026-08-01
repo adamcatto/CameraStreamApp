@@ -10,14 +10,11 @@ struct ContentView: View {
     @State private var clusterShellError: String?
     @State private var renamingWorkspaceID: UUID?
     @State private var renameText = ""
+    @State private var deletingWorkspace: CameraWorkspace?
 
     var body: some View {
         NavigationSplitView {
             VStack(spacing: 0) {
-                HStack {
-                    Spacer()
-                    Button(action: addWorkspace) { Image(systemName: "plus") }.help("Add workspace")
-                }.padding([.top, .horizontal], 8)
                 List(selection: $store.selectedID) {
                     ForEach(store.workspaces) { workspace in
                         Text(workspace.name)
@@ -30,19 +27,23 @@ struct ContentView: View {
                     if let id = ids.first,
                        let workspace = store.workspaces.first(where: { $0.id == id }) {
                         Button("Rename…") { beginRename(workspace) }
+                        Button("Delete Workspace", role: .destructive) { deletingWorkspace = workspace }
                     }
                 }
                 .onChange(of: store.selectedID) { _, _ in showSettings = false }
-                Divider()
-                Button(action: { showSettings = true }) {
-                    Label("Settings", systemImage: "gearshape")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.plain)
-                .padding(10)
-                .background(showSettings ? Color.accentColor.opacity(0.15) : Color.clear)
-                .help("Settings")
+                .frame(minHeight: 0, maxHeight: .infinity)
+
+                sidebarSettingsButton
             }
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: addWorkspace) {
+                        Image(systemName: "plus")
+                    }
+                    .help("Add workspace")
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 200, ideal: 240)
         } detail: {
             if showSettings {
                 SettingsView(credentials: credentials)
@@ -56,7 +57,10 @@ struct ContentView: View {
                         Button("Stop", role: .destructive) { streamer.stop() }.disabled(!streamer.isStreaming)
                     }.padding()
                     if streamer.isStreaming { StreamGrid(endpoints: streamer.streamEndpoints) }
-                    else { WorkspaceEditor(workspace: $store.workspaces[index]) }
+                    else {
+                        WorkspaceEditor(workspace: $store.workspaces[index])
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    }
                 }
             } else { ContentUnavailableView("Select a workspace", systemImage: "video") }
         }
@@ -76,7 +80,47 @@ struct ContentView: View {
         } message: {
             Text("Enter a new name for this workspace.")
         }
+        .alert("Delete workspace?", isPresented: Binding(
+            get: { deletingWorkspace != nil },
+            set: { if !$0 { deletingWorkspace = nil } }
+        )) {
+            Button("Delete Workspace", role: .destructive) {
+                if let workspace = deletingWorkspace {
+                    deleteWorkspace(workspace)
+                }
+                deletingWorkspace = nil
+            }
+            Button("Cancel", role: .cancel) { deletingWorkspace = nil }
+        } message: {
+            if let workspace = deletingWorkspace {
+                Text("Are you sure you want to delete \"\(workspace.name)\"? This cannot be undone.")
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button(action: { showSettings = true }) {
+                    Label("Settings", systemImage: "gearshape")
+                }
+                .help("Settings")
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in streamer.stop() }
+    }
+
+    private var sidebarSettingsButton: some View {
+        VStack(spacing: 0) {
+            Divider()
+            Button(action: { showSettings = true }) {
+                Label("Settings", systemImage: "gearshape")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .padding(10)
+            .background(showSettings ? Color.accentColor.opacity(0.15) : Color.clear)
+            .help("Settings")
+        }
+        .background(.bar)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func openClusterShell(_ workspace: CameraWorkspace) {
@@ -104,6 +148,16 @@ struct ContentView: View {
         guard !trimmed.isEmpty else { return }
         store.workspaces[index].name = trimmed
         renamingWorkspaceID = nil
+    }
+
+    private func deleteWorkspace(_ workspace: CameraWorkspace) {
+        guard let index = store.workspaces.firstIndex(where: { $0.id == workspace.id }) else { return }
+        let wasSelected = store.selectedID == workspace.id
+        store.workspaces.remove(at: index)
+        if wasSelected {
+            store.selectedID = store.workspaces.first?.id
+            showSettings = false
+        }
     }
 }
 
@@ -246,13 +300,108 @@ private struct StreamGrid: View {
 
 private struct WorkspaceEditor: View {
     @Binding var workspace: CameraWorkspace
-    @State private var selectedCamera: UUID?
+
+    private let usernameColumnWidth: CGFloat = 90
+    private let removeColumnWidth: CGFloat = 28
+
     var body: some View {
-        VStack(alignment: .leading) {
-            TextField("Workspace name", text: $workspace.name).textFieldStyle(.roundedBorder).padding([.top, .horizontal])
-            TextField("Jump host (optional, e.g. user@jump.example)", text: Binding(get: { workspace.jumpHost ?? "" }, set: { workspace.jumpHost = $0.isEmpty ? nil : $0 })).textFieldStyle(.roundedBorder).padding(.horizontal)
-            List(selection: $selectedCamera) { ForEach($workspace.cameras) { $camera in HStack { TextField("Name", text: $camera.name); TextField("IP or hostname", text: $camera.host); TextField("User", text: $camera.username).frame(width: 70) }.tag(camera.id) }.onDelete { workspace.cameras.remove(atOffsets: $0) } }
-            HStack { Button("Add camera") { workspace.cameras.append(CameraEndpoint(name: "Camera \(workspace.cameras.count + 1)", host: "")) }; Spacer() }.padding()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                TextField("Workspace name", text: $workspace.name)
+                    .textFieldStyle(.roundedBorder)
+                TextField("Jump host (optional, e.g. user@jump.example)", text: Binding(
+                    get: { workspace.jumpHost ?? "" },
+                    set: { workspace.jumpHost = $0.isEmpty ? nil : $0 }
+                ))
+                .textFieldStyle(.roundedBorder)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Cameras")
+                        .font(.headline)
+
+                    CameraListHeaderRow(usernameColumnWidth: usernameColumnWidth, removeColumnWidth: removeColumnWidth)
+
+                    if workspace.cameras.isEmpty {
+                        Text("No cameras yet.")
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 4)
+                    } else {
+                        ForEach($workspace.cameras) { $camera in
+                            CameraListRow(
+                                camera: $camera,
+                                usernameColumnWidth: usernameColumnWidth,
+                                removeColumnWidth: removeColumnWidth
+                            ) {
+                                removeCamera(id: camera.id)
+                            }
+                        }
+                    }
+
+                    Button("Add camera") { addCamera() }
+                }
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func addCamera() {
+        workspace.cameras.append(CameraEndpoint(name: "Camera \(workspace.cameras.count + 1)", host: ""))
+    }
+
+    private func removeCamera(id: UUID) {
+        workspace.cameras.removeAll { $0.id == id }
+    }
+}
+
+private struct CameraListHeaderRow: View {
+    let usernameColumnWidth: CGFloat
+    let removeColumnWidth: CGFloat
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("Camera Name")
+                .fontWeight(.bold)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("IP address")
+                .fontWeight(.bold)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("Username")
+                .fontWeight(.bold)
+                .frame(width: usernameColumnWidth, alignment: .leading)
+            Color.clear.frame(width: removeColumnWidth)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+private struct CameraListRow: View {
+    @Binding var camera: CameraEndpoint
+    let usernameColumnWidth: CGFloat
+    let removeColumnWidth: CGFloat
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            TextField("Camera name", text: $camera.name)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: .infinity)
+            TextField("IP address", text: $camera.host)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: .infinity)
+            TextField("Username", text: $camera.username)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: usernameColumnWidth)
+            Button(action: onRemove) {
+                Image(systemName: "minus.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .frame(width: removeColumnWidth)
+            .help("Remove camera")
         }
     }
 }
