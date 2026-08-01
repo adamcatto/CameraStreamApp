@@ -4,15 +4,20 @@
 *.xcworkspace
 DerivedData/
 
-# Distribution (rebuild with ./package-dmg.sh)
+# Distribution (rebuild with ./package-dmg.sh or ./package-kenny-dmg.sh)
 dist/
 *.dmg
+kenny-*.dmg
 
 # Local sandbox: lab IPs, credentials, functional test configs
 sandbox/*
 !sandbox/README.md
 !sandbox/workspaces.example.json
 !sandbox/import-workspaces.sh
+
+# Kenny lab bundle inputs (never commit)
+kenny/credentials.local.json
+sandbox/credentials.local.json
 
 # macOS
 .DS_Store

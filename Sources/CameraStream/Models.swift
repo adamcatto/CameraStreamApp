@@ -38,10 +38,21 @@ final class WorkspaceStore: ObservableObject {
         if let data = try? Data(contentsOf: fileURL),
            let saved = try? JSONDecoder().decode([CameraWorkspace].self, from: data), !saved.isEmpty {
             workspaces = saved
+        } else if let bundled = Self.bundledKennyWorkspaces() {
+            workspaces = bundled
+            save()
         } else {
             workspaces = [.example]
         }
         selectedID = workspaces.first?.id
+    }
+
+    private static func bundledKennyWorkspaces() -> [CameraWorkspace]? {
+        guard let url = Bundle.main.url(forResource: "kenny-workspaces", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let workspaces = try? JSONDecoder().decode([CameraWorkspace].self, from: data),
+              !workspaces.isEmpty else { return nil }
+        return workspaces
     }
 
     var selectedIndex: Int? { workspaces.firstIndex { $0.id == selectedID } }
@@ -52,7 +63,20 @@ final class WorkspaceStore: ObservableObject {
 final class CredentialStore: ObservableObject {
     static let shared = CredentialStore()
     @Published var passwords: [String: String] = [:]
-    private init() {}
+    private init() {
+        if let bundled = Self.bundledKennyCredentials() {
+            passwords = bundled
+        }
+    }
+
+    private static func bundledKennyCredentials() -> [String: String]? {
+        guard let url = Bundle.main.url(forResource: "kenny-credentials", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let credentials = try? JSONDecoder().decode([String: String].self, from: data),
+              !credentials.isEmpty else { return nil }
+        return credentials
+    }
+
     func accounts(for workspace: CameraWorkspace) -> [String] {
         workspace.cameras.map(\.credentialAccount) + (workspace.jumpHost.map { [$0] } ?? [])
     }
