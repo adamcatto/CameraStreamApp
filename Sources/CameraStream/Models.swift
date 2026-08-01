@@ -1,0 +1,79 @@
+import Foundation
+
+struct CameraEndpoint: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var name: String
+    var host: String
+    var username: String = "pi"
+    var port: Int = 8888
+
+    var address: String { "\(username)@\(host)" }
+    var credentialAccount: String { "\(username)@\(host)" }
+}
+
+struct CameraWorkspace: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var name: String
+    var cameras: [CameraEndpoint]
+    var jumpHost: String? = nil
+
+    static let example = CameraWorkspace(
+        name: "Example workspace",
+        cameras: [CameraEndpoint(name: "Camera 1", host: "192.0.2.10")],
+        jumpHost: nil
+    )
+}
+
+@MainActor
+final class WorkspaceStore: ObservableObject {
+    @Published var workspaces: [CameraWorkspace] { didSet { save() } }
+    @Published var selectedID: UUID?
+    private let fileURL: URL
+
+    init() {
+        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("CameraStream", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        fileURL = directory.appendingPathComponent("workspaces.json")
+        if let data = try? Data(contentsOf: fileURL),
+           let saved = try? JSONDecoder().decode([CameraWorkspace].self, from: data), !saved.isEmpty {
+            workspaces = saved
+        } else {
+            workspaces = [.example]
+        }
+        selectedID = workspaces.first?.id
+    }
+
+    var selectedIndex: Int? { workspaces.firstIndex { $0.id == selectedID } }
+    func save() { if let data = try? JSONEncoder().encode(workspaces) { try? data.write(to: fileURL, options: .atomic) } }
+}
+
+@MainActor
+final class CredentialStore: ObservableObject {
+    static let shared = CredentialStore()
+    @Published var passwords: [String: String] = [:]
+    private init() {}
+    func accounts(for workspace: CameraWorkspace) -> [String] {
+        workspace.cameras.map(\.credentialAccount) + (workspace.jumpHost.map { [$0] } ?? [])
+    }
+    func missingAccounts(for workspace: CameraWorkspace) -> [String] { accounts(for: workspace).filter { passwords[$0]?.isEmpty != false } }
+    func clear() { passwords.removeAll() }
+}
+
+enum SessionCredentials {
+    static func create(cameras: [CameraEndpoint], jumpHost: String?, passwords: [String: String]) -> URL? {
+        var credentials: [String: String] = [:]
+        for camera in cameras {
+            if let password = passwords[camera.credentialAccount] { credentials[camera.credentialAccount] = password }
+        }
+        if let jumpHost, let password = passwords[jumpHost] { credentials[jumpHost] = password }
+        guard !credentials.isEmpty,
+              let data = try? JSONEncoder().encode(credentials) else { return nil }
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("camera-stream-\(UUID().uuidString).json")
+        do {
+            try data.write(to: file, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+            return file
+        } catch { return nil }
+    }
+}
