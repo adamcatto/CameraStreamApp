@@ -246,13 +246,103 @@ private struct StreamGrid: View {
 
 private struct WorkspaceEditor: View {
     @Binding var workspace: CameraWorkspace
-    @State private var selectedCamera: UUID?
+
+    private let usernameColumnWidth: CGFloat = 90
+    private let removeColumnWidth: CGFloat = 28
+
     var body: some View {
-        VStack(alignment: .leading) {
-            TextField("Workspace name", text: $workspace.name).textFieldStyle(.roundedBorder).padding([.top, .horizontal])
-            TextField("Jump host (optional, e.g. user@jump.example)", text: Binding(get: { workspace.jumpHost ?? "" }, set: { workspace.jumpHost = $0.isEmpty ? nil : $0 })).textFieldStyle(.roundedBorder).padding(.horizontal)
-            List(selection: $selectedCamera) { ForEach($workspace.cameras) { $camera in HStack { TextField("Name", text: $camera.name); TextField("IP or hostname", text: $camera.host); TextField("User", text: $camera.username).frame(width: 70) }.tag(camera.id) }.onDelete { workspace.cameras.remove(atOffsets: $0) } }
-            HStack { Button("Add camera") { workspace.cameras.append(CameraEndpoint(name: "Camera \(workspace.cameras.count + 1)", host: "")) }; Spacer() }.padding()
+        VStack(alignment: .leading, spacing: 12) {
+            TextField("Workspace name", text: $workspace.name)
+                .textFieldStyle(.roundedBorder)
+                .padding([.top, .horizontal])
+            TextField("Jump host (optional, e.g. user@jump.example)", text: Binding(
+                get: { workspace.jumpHost ?? "" },
+                set: { workspace.jumpHost = $0.isEmpty ? nil : $0 }
+            ))
+            .textFieldStyle(.roundedBorder)
+            .padding(.horizontal)
+
+            VStack(alignment: .leading, spacing: 8) {
+                CameraListHeaderRow(usernameColumnWidth: usernameColumnWidth, removeColumnWidth: removeColumnWidth)
+
+                if workspace.cameras.isEmpty {
+                    Text("No cameras yet.")
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 4)
+                } else {
+                    ForEach($workspace.cameras) { $camera in
+                        CameraListRow(
+                            camera: $camera,
+                            usernameColumnWidth: usernameColumnWidth,
+                            removeColumnWidth: removeColumnWidth
+                        ) {
+                            removeCamera(id: camera.id)
+                        }
+                    }
+                }
+
+                Button("Add camera") { addCamera() }
+            }
+            .padding(.horizontal)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func addCamera() {
+        workspace.cameras.append(CameraEndpoint(name: "Camera \(workspace.cameras.count + 1)", host: ""))
+    }
+
+    private func removeCamera(id: UUID) {
+        workspace.cameras.removeAll { $0.id == id }
+    }
+}
+
+private struct CameraListHeaderRow: View {
+    let usernameColumnWidth: CGFloat
+    let removeColumnWidth: CGFloat
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("Camera Name")
+                .fontWeight(.bold)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("IP address")
+                .fontWeight(.bold)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("Username")
+                .fontWeight(.bold)
+                .frame(width: usernameColumnWidth, alignment: .leading)
+            Color.clear.frame(width: removeColumnWidth)
+        }
+        .padding(.top, 4)
+    }
+}
+
+private struct CameraListRow: View {
+    @Binding var camera: CameraEndpoint
+    let usernameColumnWidth: CGFloat
+    let removeColumnWidth: CGFloat
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            TextField("Camera name", text: $camera.name)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: .infinity)
+            TextField("IP address", text: $camera.host)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: .infinity)
+            TextField("Username", text: $camera.username)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: usernameColumnWidth)
+            Button(action: onRemove) {
+                Image(systemName: "minus.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .frame(width: removeColumnWidth)
+            .help("Remove camera")
         }
     }
 }
