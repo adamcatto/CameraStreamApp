@@ -8,6 +8,8 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var pendingWorkspace: CameraWorkspace?
     @State private var clusterShellError: String?
+    @State private var renamingWorkspaceID: UUID?
+    @State private var renameText = ""
 
     var body: some View {
         NavigationSplitView {
@@ -17,7 +19,18 @@ struct ContentView: View {
                     Button(action: addWorkspace) { Image(systemName: "plus") }.help("Add workspace")
                 }.padding([.top, .horizontal], 8)
                 List(selection: $store.selectedID) {
-                    ForEach(store.workspaces) { Text($0.name).tag($0.id as UUID?) }
+                    ForEach(store.workspaces) { workspace in
+                        Text(workspace.name)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .tag(workspace.id)
+                    }
+                }
+                .contextMenu(forSelectionType: UUID.self) { ids in
+                    if let id = ids.first,
+                       let workspace = store.workspaces.first(where: { $0.id == id }) {
+                        Button("Rename…") { beginRename(workspace) }
+                    }
                 }
                 .onChange(of: store.selectedID) { _, _ in showSettings = false }
                 Divider()
@@ -52,6 +65,17 @@ struct ContentView: View {
         .alert("Cluster shell", isPresented: Binding(get: { clusterShellError != nil }, set: { if !$0 { clusterShellError = nil } })) {
             Button("OK", role: .cancel) { clusterShellError = nil }
         } message: { Text(clusterShellError ?? "") }
+        .alert("Rename workspace", isPresented: Binding(
+            get: { renamingWorkspaceID != nil },
+            set: { if !$0 { renamingWorkspaceID = nil } }
+        )) {
+            TextField("Workspace name", text: $renameText)
+            Button("Rename") { applyRename() }
+                .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button("Cancel", role: .cancel) { renamingWorkspaceID = nil }
+        } message: {
+            Text("Enter a new name for this workspace.")
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in streamer.stop() }
     }
 
@@ -64,6 +88,23 @@ struct ContentView: View {
         else { pendingWorkspace = workspace }
     }
     private func addWorkspace() { let workspace = CameraWorkspace(name: "New workspace", cameras: []); store.workspaces.append(workspace); store.selectedID = workspace.id }
+
+    private func beginRename(_ workspace: CameraWorkspace) {
+        renamingWorkspaceID = workspace.id
+        renameText = workspace.name
+    }
+
+    private func applyRename() {
+        guard let id = renamingWorkspaceID,
+              let index = store.workspaces.firstIndex(where: { $0.id == id }) else {
+            renamingWorkspaceID = nil
+            return
+        }
+        let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        store.workspaces[index].name = trimmed
+        renamingWorkspaceID = nil
+    }
 }
 
 private struct WorkspacePasswordPrompt: View {
