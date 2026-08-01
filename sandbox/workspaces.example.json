@@ -1,0 +1,19 @@
+[
+  {
+    "id": "00000000-0000-0000-0000-000000000001",
+    "name": "Example cluster",
+    "jumpHost": "user@jump.example",
+    "cameras": [
+      { "id": "00000000-0000-0000-0000-000000000011", "name": "Camera 1", "host": "192.0.2.10", "username": "pi", "port": 8888 },
+      { "id": "00000000-0000-0000-0000-000000000012", "name": "Camera 2", "host": "192.0.2.11", "username": "pi", "port": 8888 }
+    ]
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000002",
+    "name": "Direct connect",
+    "jumpHost": null,
+    "cameras": [
+      { "id": "00000000-0000-0000-0000-000000000021", "name": "Camera 1", "host": "192.0.2.20", "username": "pi", "port": 8888 }
+    ]
+  }
+]

@@ -1,0 +1,32 @@
+# Swift build artifacts
+.build/
+*.xcodeproj
+*.xcworkspace
+DerivedData/
+
+# Distribution (rebuild with ./package-dmg.sh)
+dist/
+dist-icon/
+*.dmg
+
+# Local sandbox: lab IPs, credentials, functional test configs
+sandbox/*
+!sandbox/README.md
+!sandbox/workspaces.example.json
+!sandbox/import-workspaces.sh
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Editor / IDE
+.idea/
+*.code-workspace
+
+# Accidental secret or credential files
+*.pem
+*.key
+id_rsa*
+*.env
+.env.*
