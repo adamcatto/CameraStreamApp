@@ -13,35 +13,43 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            VStack(spacing: 0) {
-                HStack {
-                    Spacer()
-                    Button(action: addWorkspace) { Image(systemName: "plus") }.help("Add workspace")
-                }.padding([.top, .horizontal], 8)
-                List(selection: $store.selectedID) {
-                    ForEach(store.workspaces) { workspace in
-                        Text(workspace.name)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .tag(workspace.id)
-                    }
-                }
-                .contextMenu(forSelectionType: UUID.self) { ids in
-                    if let id = ids.first,
-                       let workspace = store.workspaces.first(where: { $0.id == id }) {
-                        Button("Rename…") { beginRename(workspace) }
-                    }
-                }
-                .onChange(of: store.selectedID) { _, _ in showSettings = false }
-                Divider()
-                Button(action: { showSettings = true }) {
-                    Label("Settings", systemImage: "gearshape")
+            List(selection: $store.selectedID) {
+                ForEach(store.workspaces) { workspace in
+                    Text(workspace.name)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .tag(workspace.id)
                 }
-                .buttonStyle(.plain)
-                .padding(10)
-                .background(showSettings ? Color.accentColor.opacity(0.15) : Color.clear)
-                .help("Settings")
+            }
+            .contextMenu(forSelectionType: UUID.self) { ids in
+                if let id = ids.first,
+                   let workspace = store.workspaces.first(where: { $0.id == id }) {
+                    Button("Rename…") { beginRename(workspace) }
+                }
+            }
+            .onChange(of: store.selectedID) { _, _ in showSettings = false }
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: addWorkspace) {
+                        Image(systemName: "plus")
+                    }
+                    .help("Add workspace")
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: 0) {
+                    Divider()
+                    Button(action: { showSettings = true }) {
+                        Label("Settings", systemImage: "gearshape")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(10)
+                    .background(showSettings ? Color.accentColor.opacity(0.15) : Color.clear)
+                    .help("Settings")
+                }
+                .background(.bar)
             }
         } detail: {
             if showSettings {
@@ -56,7 +64,10 @@ struct ContentView: View {
                         Button("Stop", role: .destructive) { streamer.stop() }.disabled(!streamer.isStreaming)
                     }.padding()
                     if streamer.isStreaming { StreamGrid(endpoints: streamer.streamEndpoints) }
-                    else { WorkspaceEditor(workspace: $store.workspaces[index]) }
+                    else {
+                        WorkspaceEditor(workspace: $store.workspaces[index])
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    }
                 }
             } else { ContentUnavailableView("Select a workspace", systemImage: "video") }
         }
@@ -251,42 +262,45 @@ private struct WorkspaceEditor: View {
     private let removeColumnWidth: CGFloat = 28
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            TextField("Workspace name", text: $workspace.name)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                TextField("Workspace name", text: $workspace.name)
+                    .textFieldStyle(.roundedBorder)
+                TextField("Jump host (optional, e.g. user@jump.example)", text: Binding(
+                    get: { workspace.jumpHost ?? "" },
+                    set: { workspace.jumpHost = $0.isEmpty ? nil : $0 }
+                ))
                 .textFieldStyle(.roundedBorder)
-                .padding([.top, .horizontal])
-            TextField("Jump host (optional, e.g. user@jump.example)", text: Binding(
-                get: { workspace.jumpHost ?? "" },
-                set: { workspace.jumpHost = $0.isEmpty ? nil : $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-            .padding(.horizontal)
 
-            VStack(alignment: .leading, spacing: 8) {
-                CameraListHeaderRow(usernameColumnWidth: usernameColumnWidth, removeColumnWidth: removeColumnWidth)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Cameras")
+                        .font(.headline)
 
-                if workspace.cameras.isEmpty {
-                    Text("No cameras yet.")
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 4)
-                } else {
-                    ForEach($workspace.cameras) { $camera in
-                        CameraListRow(
-                            camera: $camera,
-                            usernameColumnWidth: usernameColumnWidth,
-                            removeColumnWidth: removeColumnWidth
-                        ) {
-                            removeCamera(id: camera.id)
+                    CameraListHeaderRow(usernameColumnWidth: usernameColumnWidth, removeColumnWidth: removeColumnWidth)
+
+                    if workspace.cameras.isEmpty {
+                        Text("No cameras yet.")
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 4)
+                    } else {
+                        ForEach($workspace.cameras) { $camera in
+                            CameraListRow(
+                                camera: $camera,
+                                usernameColumnWidth: usernameColumnWidth,
+                                removeColumnWidth: removeColumnWidth
+                            ) {
+                                removeCamera(id: camera.id)
+                            }
                         }
                     }
+
+                    Button("Add camera") { addCamera() }
                 }
-
-                Button("Add camera") { addCamera() }
             }
-            .padding(.horizontal)
-
-            Spacer(minLength: 0)
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func addCamera() {
@@ -315,7 +329,9 @@ private struct CameraListHeaderRow: View {
                 .frame(width: usernameColumnWidth, alignment: .leading)
             Color.clear.frame(width: removeColumnWidth)
         }
-        .padding(.top, 4)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
     }
 }
 
