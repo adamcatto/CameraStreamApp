@@ -21,10 +21,15 @@ struct ContentView: View {
                 List(selection: $store.selectedID) {
                     ForEach(store.workspaces) { workspace in
                         Text(workspace.name)
-                            .tag(workspace.id as UUID?)
-                            .contextMenu {
-                                Button("Rename…") { beginRename(workspace) }
-                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .tag(workspace.id)
+                    }
+                }
+                .contextMenu(forSelectionType: UUID.self) { ids in
+                    if let id = ids.first,
+                       let workspace = store.workspaces.first(where: { $0.id == id }) {
+                        Button("Rename…") { beginRename(workspace) }
                     }
                 }
                 .onChange(of: store.selectedID) { _, _ in showSettings = false }
