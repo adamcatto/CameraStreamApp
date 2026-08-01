@@ -10,24 +10,31 @@ struct ContentView: View {
     @State private var clusterShellError: String?
     @State private var renamingWorkspaceID: UUID?
     @State private var renameText = ""
+    @State private var deletingWorkspace: CameraWorkspace?
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $store.selectedID) {
-                ForEach(store.workspaces) { workspace in
-                    Text(workspace.name)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .tag(workspace.id)
+            VStack(spacing: 0) {
+                List(selection: $store.selectedID) {
+                    ForEach(store.workspaces) { workspace in
+                        Text(workspace.name)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .tag(workspace.id)
+                    }
                 }
-            }
-            .contextMenu(forSelectionType: UUID.self) { ids in
-                if let id = ids.first,
-                   let workspace = store.workspaces.first(where: { $0.id == id }) {
-                    Button("Rename…") { beginRename(workspace) }
+                .contextMenu(forSelectionType: UUID.self) { ids in
+                    if let id = ids.first,
+                       let workspace = store.workspaces.first(where: { $0.id == id }) {
+                        Button("Rename…") { beginRename(workspace) }
+                        Button("Delete Workspace", role: .destructive) { deletingWorkspace = workspace }
+                    }
                 }
+                .onChange(of: store.selectedID) { _, _ in showSettings = false }
+                .frame(minHeight: 0, maxHeight: .infinity)
+
+                sidebarSettingsButton
             }
-            .onChange(of: store.selectedID) { _, _ in showSettings = false }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button(action: addWorkspace) {
@@ -37,20 +44,6 @@ struct ContentView: View {
                 }
             }
             .navigationSplitViewColumnWidth(min: 200, ideal: 240)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                VStack(spacing: 0) {
-                    Divider()
-                    Button(action: { showSettings = true }) {
-                        Label("Settings", systemImage: "gearshape")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(10)
-                    .background(showSettings ? Color.accentColor.opacity(0.15) : Color.clear)
-                    .help("Settings")
-                }
-                .background(.bar)
-            }
         } detail: {
             if showSettings {
                 SettingsView(credentials: credentials)
@@ -87,7 +80,47 @@ struct ContentView: View {
         } message: {
             Text("Enter a new name for this workspace.")
         }
+        .alert("Delete workspace?", isPresented: Binding(
+            get: { deletingWorkspace != nil },
+            set: { if !$0 { deletingWorkspace = nil } }
+        )) {
+            Button("Delete Workspace", role: .destructive) {
+                if let workspace = deletingWorkspace {
+                    deleteWorkspace(workspace)
+                }
+                deletingWorkspace = nil
+            }
+            Button("Cancel", role: .cancel) { deletingWorkspace = nil }
+        } message: {
+            if let workspace = deletingWorkspace {
+                Text("Are you sure you want to delete \"\(workspace.name)\"? This cannot be undone.")
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button(action: { showSettings = true }) {
+                    Label("Settings", systemImage: "gearshape")
+                }
+                .help("Settings")
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in streamer.stop() }
+    }
+
+    private var sidebarSettingsButton: some View {
+        VStack(spacing: 0) {
+            Divider()
+            Button(action: { showSettings = true }) {
+                Label("Settings", systemImage: "gearshape")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .padding(10)
+            .background(showSettings ? Color.accentColor.opacity(0.15) : Color.clear)
+            .help("Settings")
+        }
+        .background(.bar)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func openClusterShell(_ workspace: CameraWorkspace) {
@@ -115,6 +148,16 @@ struct ContentView: View {
         guard !trimmed.isEmpty else { return }
         store.workspaces[index].name = trimmed
         renamingWorkspaceID = nil
+    }
+
+    private func deleteWorkspace(_ workspace: CameraWorkspace) {
+        guard let index = store.workspaces.firstIndex(where: { $0.id == workspace.id }) else { return }
+        let wasSelected = store.selectedID == workspace.id
+        store.workspaces.remove(at: index)
+        if wasSelected {
+            store.selectedID = store.workspaces.first?.id
+            showSettings = false
+        }
     }
 }
 
