@@ -32,7 +32,7 @@ struct ContentView: View {
             }
         } detail: {
             if showSettings {
-                SettingsView(credentials: credentials, workspaces: store.workspaces)
+                SettingsView(credentials: credentials)
             } else if let index = store.selectedIndex {
                 VStack(spacing: 0) {
                     HStack {
@@ -90,24 +90,35 @@ private struct WorkspacePasswordPrompt: View {
 }
 
 private struct SettingsView: View {
+    @EnvironmentObject private var store: WorkspaceStore
     @ObservedObject var credentials: CredentialStore
-    let workspaces: [CameraWorkspace]
+    @State private var revealedAccounts: Set<String> = []
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Settings").font(.title2)
-                Text("Session credentials are visible and editable here. They are not saved to Keychain or disk.").foregroundStyle(.secondary)
+                Text("Rename cameras and manage session credentials here. Passwords are not saved to Keychain or disk.").foregroundStyle(.secondary)
                 Text("Bundled tools: \(BundledTools.bundledToolStatus)").font(.caption).foregroundStyle(.secondary)
             }.padding()
             List {
-                ForEach(workspaces) { workspace in
+                ForEach(Array(store.workspaces.enumerated()), id: \.element.id) { workspaceIndex, workspace in
                     Section(workspace.name) {
-                        ForEach(credentials.accounts(for: workspace), id: \.self) { account in
-                            HStack {
-                                Text(account).frame(width: 250, alignment: .leading)
-                                SecureField("Password", text: Binding(get: { credentials.passwords[account] ?? "" }, set: { credentials.passwords[account] = $0 }))
-                                    .textFieldStyle(.roundedBorder)
-                            }
+                        ForEach($store.workspaces[workspaceIndex].cameras) { $camera in
+                            SettingsCameraRow(
+                                camera: $camera,
+                                credentials: credentials,
+                                revealedAccounts: $revealedAccounts
+                            )
+                        }
+                        if let jumpHost = workspace.jumpHost {
+                            SettingsCredentialRow(
+                                label: "Jump host",
+                                detail: jumpHost,
+                                account: jumpHost,
+                                credentials: credentials,
+                                revealedAccounts: $revealedAccounts
+                            )
                         }
                     }
                 }
@@ -117,6 +128,73 @@ private struct SettingsView: View {
                 Spacer()
             }.padding()
         }
+    }
+}
+
+private struct SettingsCameraRow: View {
+    @Binding var camera: CameraEndpoint
+    @ObservedObject var credentials: CredentialStore
+    @Binding var revealedAccounts: Set<String>
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("Name", text: $camera.name)
+                .textFieldStyle(.roundedBorder)
+            SettingsCredentialRow(
+                detail: camera.credentialAccount,
+                account: camera.credentialAccount,
+                credentials: credentials,
+                revealedAccounts: $revealedAccounts
+            )
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct SettingsCredentialRow: View {
+    var label: String? = nil
+    let detail: String
+    let account: String
+    @ObservedObject var credentials: CredentialStore
+    @Binding var revealedAccounts: Set<String>
+
+    private var passwordBinding: Binding<String> {
+        Binding(
+            get: { credentials.passwords[account] ?? "" },
+            set: { credentials.passwords[account] = $0 }
+        )
+    }
+
+    private var isRevealed: Bool { revealedAccounts.contains(account) }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                if let label {
+                    Text(label).font(.caption).foregroundStyle(.secondary)
+                }
+                Text(detail).font(label == nil ? .body : .caption2).foregroundStyle(label == nil ? .primary : .tertiary)
+            }
+            .frame(width: 180, alignment: .leading)
+            Group {
+                if isRevealed {
+                    TextField("Password", text: passwordBinding)
+                } else {
+                    SecureField("Password", text: passwordBinding)
+                }
+            }
+            .textFieldStyle(.roundedBorder)
+            Button(action: { toggleReveal() }) {
+                Image(systemName: isRevealed ? "eye.slash" : "eye")
+            }
+            .buttonStyle(.borderless)
+            .help(isRevealed ? "Hide password" : "Show password")
+        }
+    }
+
+    private func toggleReveal() {
+        if isRevealed { revealedAccounts.remove(account) }
+        else { revealedAccounts.insert(account) }
     }
 }
 
