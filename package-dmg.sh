@@ -18,7 +18,7 @@ if [[ ! -x "$vendor_csshx" ]]; then
   fi
 fi
 
-rm -rf "$app" "$root/dist/Camera-Stream.dmg"
+rm -rf "$app" "$root/dist/Camera-Stream.dmg" "$root/dist/Camera-Stream-with-icon.dmg" "$root/dist-icon"
 swift build -c release --package-path "$root"
 mkdir -p "$app/Contents/MacOS"
 mkdir -p "$app/Contents/Resources/bin"

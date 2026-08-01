@@ -6,7 +6,6 @@ DerivedData/
 
 # Distribution (rebuild with ./package-dmg.sh)
 dist/
-dist-icon/
 *.dmg
 
 # Local sandbox: lab IPs, credentials, functional test configs
