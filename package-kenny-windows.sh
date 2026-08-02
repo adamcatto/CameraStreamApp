@@ -132,10 +132,16 @@ credentials_b64="$(base64 -i "$bundle_file" | tr -d '\n')"
 rm -f "$bundle_file"
 
 echo "Triggering GitHub Actions Kenny Windows build on branch $branch ..."
-run_id="$(gh workflow run windows-kenny-build.yml --ref "$branch" \
+gh workflow run windows-kenny-build.yml --ref "$branch" \
   -f "workspaces_b64=$workspaces_b64" \
-  -f "credentials_b64=$credentials_b64" \
-  --json databaseId --jq .databaseId)"
+  -f "credentials_b64=$credentials_b64"
+
+sleep 5
+run_id="$(gh run list --workflow=windows-kenny-build.yml --branch "$branch" -L 1 --json databaseId --jq '.[0].databaseId')"
+if [[ -z "$run_id" || "$run_id" == "null" ]]; then
+  echo "Could not find the workflow run. Check: gh run list --workflow=windows-kenny-build.yml" >&2
+  exit 1
+fi
 
 echo "Waiting for workflow run $run_id ..."
 if ! gh run watch "$run_id" --exit-status; then
