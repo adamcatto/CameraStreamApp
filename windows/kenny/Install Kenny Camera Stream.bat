@@ -30,7 +30,7 @@ if not exist "%SOURCE%kenny-credentials.json" (
 )
 
 if not exist "%DEST%" mkdir "%DEST%"
-robocopy "%SOURCE%" "%DEST%" /E /NFL /NDL /NJH /NJS /NC /NS /NP
+robocopy "%SOURCE%." "%DEST%" /E /NFL /NDL /NJH /NJS /NC /NS /NP
 set "ROBOCOPY_EXIT=%ERRORLEVEL%"
 if %ROBOCOPY_EXIT% GEQ 8 (
     echo ERROR: robocopy failed with exit code %ROBOCOPY_EXIT%.
