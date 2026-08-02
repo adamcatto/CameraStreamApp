@@ -75,7 +75,7 @@ namespace CameraStream.Windows.Services
                         if (_cts.IsCancellationRequested)
                             return;
 
-                        await LaunchAsync(workspace.Cameras[i], i, workspace.JumpHost, _cts.Token);
+                        Launch(workspace.Cameras[i], i, workspace.JumpHost);
                     }
 
                     await Task.Delay(3000, _cts.Token);
@@ -203,7 +203,7 @@ namespace CameraStream.Windows.Services
             }
         }
 
-        private async Task LaunchAsync(CameraEndpoint camera, int index, string? jumpHost, CancellationToken ct)
+        private void Launch(CameraEndpoint camera, int index, string? jumpHost)
         {
             var port = 8888 + index;
             var command = $"pkill -x libcamera-vid 2>/dev/null || true; " +
@@ -216,8 +216,8 @@ namespace CameraStream.Windows.Services
                           $"if [ \"${{c##*/}}\" = raspivid ]; then nohup \"$c\" -md 4 -ss 20000 -ISO 32 -w 1640 -h 1232 -fps 30 -ih -n -l -o tcp://0.0.0.0:{port} -t 0 >/tmp/camera-stream.log 2>&1 & " +
                           $"else nohup \"$c\" --shutter 20000 --gain 32 --brightness 0.2 --width 1920 --height 1080 --codec h264 --framerate 30 --autofocus-mode auto --lens-position 3 --inline --listen -o tcp://0.0.0.0:{port} -t 0 >/tmp/camera-stream.log 2>&1 & fi";
 
-            await _ssh.RunCommandAsync(camera, jumpHost, _credentialFile, command,
-                msg => LogService.Write($"[launch {camera.Address}] {msg}"), ct);
+            _ssh.StartLaunch(camera, jumpHost, _credentialFile, command,
+                msg => LogService.Write($"[launch {camera.Address}] {msg}"));
         }
 
         private void OpenTunnel(CameraEndpoint camera, int remotePort, int localPort, string jumpHost)

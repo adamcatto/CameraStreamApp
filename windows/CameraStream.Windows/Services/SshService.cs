@@ -70,6 +70,49 @@ namespace CameraStream.Windows.Services
             return null;
         }
 
+        private void AddCommonOptions(ProcessStartInfo psi)
+        {
+            psi.ArgumentList.Add("-F");
+            psi.ArgumentList.Add("NUL");
+            psi.ArgumentList.Add("-o");
+            psi.ArgumentList.Add("ControlMaster=no");
+            psi.ArgumentList.Add("-o");
+            psi.ArgumentList.Add("ControlPersist=no");
+            psi.ArgumentList.Add("-o");
+            psi.ArgumentList.Add("ConnectTimeout=6");
+            psi.ArgumentList.Add("-o");
+            psi.ArgumentList.Add("StrictHostKeyChecking=accept-new");
+        }
+
+        public Process StartLaunch(CameraEndpoint camera, string? jumpHost, string? credentialFile,
+            string command, Action<string>? onLog)
+        {
+            if (!IsAvailable || SshPath == null)
+                throw new InvalidOperationException("SSH not available");
+
+            var psi = BuildProcessStartInfo(camera, jumpHost, command, credentialFile);
+            var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+
+            if (onLog != null)
+            {
+                process.OutputDataReceived += (s, e) =>
+                {
+                    if (e.Data != null)
+                        onLog(e.Data);
+                };
+                process.ErrorDataReceived += (s, e) =>
+                {
+                    if (e.Data != null)
+                        onLog(e.Data);
+                };
+            }
+
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            return process;
+        }
+
         public async Task RunCommandAsync(CameraEndpoint camera, string? jumpHost, string? credentialFile,
             string command, Action<string>? onLog, CancellationToken ct)
         {
@@ -120,8 +163,7 @@ namespace CameraStream.Windows.Services
                 RedirectStandardOutput = true
             };
 
-            psi.ArgumentList.Add("-o");
-            psi.ArgumentList.Add("ConnectTimeout=6");
+            AddCommonOptions(psi);
             psi.ArgumentList.Add("-o");
             psi.ArgumentList.Add("ExitOnForwardFailure=yes");
             psi.ArgumentList.Add("-N");
@@ -182,10 +224,7 @@ namespace CameraStream.Windows.Services
                 RedirectStandardOutput = true
             };
 
-            psi.ArgumentList.Add("-o");
-            psi.ArgumentList.Add("ConnectTimeout=6");
-            psi.ArgumentList.Add("-o");
-            psi.ArgumentList.Add("StrictHostKeyChecking=accept-new");
+            AddCommonOptions(psi);
 
             if (!string.IsNullOrEmpty(jumpHost))
             {
