@@ -1,6 +1,7 @@
+using System;
 using System.Windows;
+using System.Windows.Threading;
 using CameraStream.Windows.Services;
-using LibVLCSharp.Shared;
 
 namespace CameraStream.Windows
 {
@@ -11,7 +12,24 @@ namespace CameraStream.Windows
         protected override void OnStartup(StartupEventArgs e)
         {
             LogService.Write("Camera Stream starting...");
-            Core.Initialize();
+
+            DispatcherUnhandledException += (_, args) =>
+            {
+                LogService.Write($"Unhandled UI exception: {args.Exception.Message}");
+                MessageBox.Show(
+                    $"Camera Stream encountered an error:\n\n{args.Exception.Message}",
+                    "Camera Stream",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                args.Handled = true;
+            };
+
+            AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            {
+                if (args.ExceptionObject is Exception ex)
+                    LogService.Write($"Unhandled exception: {ex.Message}");
+            };
+
             base.OnStartup(e);
             LogService.Write("Camera Stream UI loaded.");
         }

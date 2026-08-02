@@ -8,11 +8,17 @@ $required = @(
     "CameraStream.Windows.exe",
     "CameraSSHAskpass.cmd",
     "CameraSSHAskpass.ps1",
-    "libvlc.dll",
-    "LibVLCSharp.dll"
+    "LibVLCSharp.dll",
+    "libvlc\win-x64\libvlc.dll"
 )
 
-$missing = $required | Where-Object { -not (Test-Path (Join-Path $publishDir $_)) }
+$missing = @()
+foreach ($item in $required) {
+    $path = Join-Path $publishDir $item
+    if (-not (Test-Path $path)) {
+        $missing += $item
+    }
+}
 
 if ($missing) {
     Write-Error "Missing files in ${publishDir}:`n$($missing -join "`n")"
