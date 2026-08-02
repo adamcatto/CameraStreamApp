@@ -3,10 +3,10 @@ $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $root "..")
-$project = Join-Path $root "CameraStream.Windows" "CameraStream.Windows.csproj"
-$bundler = Join-Path $root "scripts" "bundle-kenny-credentials.ps1"
+$project = Join-Path $root "CameraStream.Windows\CameraStream.Windows.csproj"
+$bundler = Join-Path $root "scripts\bundle-kenny-credentials.ps1"
 $publishDir = Join-Path $root "publish"
-$distDir = Join-Path $repoRoot "dist" "windows"
+$distDir = Join-Path $repoRoot "dist\windows"
 $appDir = Join-Path $distDir "KennyCameraStream"
 $zip = Join-Path $distDir "kenny-CameraStream-Windows.zip"
 
@@ -52,8 +52,8 @@ Or ensure one of these exists:
 }
 
 if (-not $credentialsSource -or -not (Test-Path $credentialsSource)) {
-    $template = Join-Path $repoRoot "kenny" "credentials.local.json"
-    $generateScript = Join-Path $repoRoot "kenny" "generate-credentials-template.sh"
+    $template = Join-Path $repoRoot "kenny\credentials.local.json"
+    $generateScript = Join-Path $repoRoot "kenny\generate-credentials-template.sh"
     if (Test-Path $generateScript) {
         & bash $generateScript $workspacesSource $template
     }
@@ -94,7 +94,7 @@ function Build() {
 
     Copy-Item $workspacesSource (Join-Path $publishDir "kenny-workspaces.json")
     Copy-Item $bundleFile (Join-Path $publishDir "kenny-credentials.json")
-    Copy-Item (Join-Path $root "kenny" "Install Kenny Camera Stream.bat") $publishDir
+    Copy-Item (Join-Path $root "kenny\Install Kenny Camera Stream.bat") $publishDir
     Remove-Item $bundleFile -Force
 }
 

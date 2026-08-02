@@ -2,9 +2,10 @@
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$project = Join-Path $root "CameraStream.Windows" "CameraStream.Windows.csproj"
+$repoRoot = Split-Path -Parent $root
+$project = Join-Path $root "CameraStream.Windows\CameraStream.Windows.csproj"
 $publishDir = Join-Path $root "publish"
-$distDir = Join-Path $root ".." "dist" "windows"
+$distDir = Join-Path $repoRoot "dist\windows"
 $appDir = Join-Path $distDir "CameraStream"
 $zip = Join-Path $distDir "CameraStream-Windows.zip"
 
@@ -36,7 +37,7 @@ function Package() {
     Write-Host "Created $zip"
 }
 
-$smokeTest = Join-Path $root "scripts" "smoke-test-windows.ps1"
+$smokeTest = Join-Path $root "scripts\smoke-test-windows.ps1"
 
 Clean
 Build
