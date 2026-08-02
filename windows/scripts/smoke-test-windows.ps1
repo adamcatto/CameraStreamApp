@@ -15,7 +15,7 @@ $required = @(
 $missing = $required | Where-Object { -not (Test-Path (Join-Path $publishDir $_)) }
 
 if ($missing) {
-    Write-Error "Missing files in $publishDir:`n$($missing -join "`n")"
+    Write-Error "Missing files in ${publishDir}:`n$($missing -join "`n")"
     exit 1
 }
 
