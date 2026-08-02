@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Build a Kenny Windows zip via GitHub Actions from your Mac.
-# Bundles lab workspaces + credentials, triggers CI, downloads dist/windows/kenny-CameraStream-Windows.zip
+# Build a Kenny Windows zip entirely on your Mac.
+# Downloads the credential-free Windows app from GitHub Actions (or uses local dist),
+# then bundles lab workspaces + credentials locally. Credentials never leave your Mac.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")" && pwd)"
@@ -9,6 +10,7 @@ credentials_source="${2:-}"
 branch="${CAMERA_STREAM_WINDOWS_BRANCH:-windows-port}"
 bundle_file="$root/dist/kenny-credentials.bundle.json"
 output_zip="$root/dist/windows/kenny-CameraStream-Windows.zip"
+kenny_bat="$root/windows/kenny/Install Kenny Camera Stream.bat"
 
 if [[ -z "$workspaces_source" ]]; then
   if [[ -f "$HOME/Library/Application Support/CameraStream/workspaces.json" ]]; then
@@ -50,13 +52,8 @@ EOF
   exit 1
 fi
 
-if ! command -v gh >/dev/null 2>&1; then
-  echo "The GitHub CLI (gh) is required. Install with: brew install gh" >&2
-  exit 1
-fi
-
-if ! gh auth status >/dev/null 2>&1; then
-  echo "Run 'gh auth login' before building the Kenny Windows zip." >&2
+if [[ ! -f "$kenny_bat" ]]; then
+  echo "Missing Kenny installer: $kenny_bat" >&2
   exit 1
 fi
 
@@ -127,43 +124,89 @@ else
   exit 1
 fi
 
-workspaces_b64="$(base64 -i "$workspaces_source" | tr -d '\n')"
-credentials_b64="$(base64 -i "$bundle_file" | tr -d '\n')"
-rm -f "$bundle_file"
-
-echo "Triggering GitHub Actions Kenny Windows build on branch $branch ..."
-gh workflow run "Windows build" --ref "$branch" \
-  -f "workspaces_b64=$workspaces_b64" \
-  -f "credentials_b64=$credentials_b64"
-
-sleep 5
-run_id="$(gh run list --workflow="Windows build" --branch "$branch" -L 1 --json databaseId --jq '.[0].databaseId')"
-if [[ -z "$run_id" || "$run_id" == "null" ]]; then
-  echo "Could not find the workflow run. Check: gh run list --workflow=\"Windows build\"" >&2
+if ! command -v gh >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+The GitHub CLI (gh) is required to download the credential-free Windows app.
+Install with: brew install gh
+Then run: gh auth login
+EOF
   exit 1
 fi
 
-echo "Waiting for workflow run $run_id ..."
-if ! gh run watch "$run_id" --exit-status; then
-  echo "Kenny Windows build failed. Logs:" >&2
-  gh run view "$run_id" --log-failed >&2 || true
+if ! gh auth status >/dev/null 2>&1; then
+  echo "Run 'gh auth login' before building the Kenny Windows zip." >&2
   exit 1
 fi
+
+run_id="$(gh run list --workflow="Windows build" --branch "$branch" -L 30 \
+  --json databaseId,conclusion \
+  --jq '[.[] | select(.conclusion == "success")] | .[0].databaseId // empty')"
+if [[ -z "$run_id" ]]; then
+  echo "No successful Windows build found on branch $branch." >&2
+  echo "Push to windows-port or wait for CI, then run this script again." >&2
+  exit 1
+fi
+
+download_dir="$(mktemp -d "${TMPDIR:-/tmp}/kenny-windows-download.XXXXXX")"
+echo "Downloading credential-free CameraStream-Windows artifact from run $run_id ..."
+gh run download "$run_id" --name CameraStream-Windows --dir "$download_dir"
+
+base_zip="$download_dir/CameraStream-Windows.zip"
+if [[ ! -f "$base_zip" ]]; then
+  echo "Download finished but CameraStream-Windows.zip was not found." >&2
+  ls -la "$download_dir" >&2 || true
+  exit 1
+fi
+
+staging="$(mktemp -d "${TMPDIR:-/tmp}/kenny-windows-staging.XXXXXX")"
+cleanup() {
+  rm -rf "$staging" "$download_dir"
+  rm -f "$bundle_file"
+}
+trap cleanup EXIT
+
+unzip -q "$base_zip" -d "$staging"
+
+app_dir="$staging"
+if [[ ! -f "$app_dir/CameraStream.Windows.exe" ]]; then
+  shopt -s nullglob
+  subdirs=("$staging"/*/)
+  shopt -u nullglob
+  if [[ ${#subdirs[@]} -eq 1 && -f "${subdirs[0]}CameraStream.Windows.exe" ]]; then
+    app_dir="${subdirs[0]}"
+  else
+    echo "CameraStream.Windows.exe not found after extracting $base_zip" >&2
+    find "$staging" -maxdepth 2 -type f >&2 || true
+    exit 1
+  fi
+fi
+
+cp "$workspaces_source" "$app_dir/kenny-workspaces.json"
+cp "$bundle_file" "$app_dir/kenny-credentials.json"
+chmod 600 "$app_dir/kenny-credentials.json"
+cp "$kenny_bat" "$app_dir/Install Kenny Camera Stream.bat"
 
 rm -f "$output_zip"
-gh run download "$run_id" --name kenny-CameraStream-Windows --dir "$root/dist/windows"
+(
+  cd "$app_dir"
+  zip -qr "$output_zip" .
+)
 
 if [[ ! -f "$output_zip" ]]; then
-  echo "Download finished but $output_zip was not found." >&2
-  ls -la "$root/dist/windows" >&2 || true
+  echo "Failed to create $output_zip" >&2
   exit 1
 fi
 
+output_zip_abs="$(cd "$(dirname "$output_zip")" && pwd)/$(basename "$output_zip")"
+
 echo
-echo "Created $output_zip"
+echo "Kenny Windows zip:"
+echo "$output_zip_abs"
+echo
 echo "Bundled workspaces from: $workspaces_source"
 echo "Bundled credentials from: $credentials_source"
+echo "Base Windows app downloaded from GitHub Actions run $run_id (no secrets sent to GitHub)."
 echo
+echo "Credentials were bundled locally on this Mac only."
 echo "Send this zip privately to your Windows colleague."
 echo "They should extract it and double-click: Install Kenny Camera Stream.bat"
-echo "Share like a credential — never commit or upload to a public link."

@@ -6,19 +6,9 @@ on:
   pull_request:
     branches: [windows-port, main]
   workflow_dispatch:
-    inputs:
-      workspaces_b64:
-        description: Optional base64 workspaces JSON for a Kenny bundle build
-        required: false
-        type: string
-      credentials_b64:
-        description: Optional base64 bundled Kenny credentials JSON
-        required: false
-        type: string
 
 jobs:
   build:
-    if: github.event_name != 'workflow_dispatch' || inputs.workspaces_b64 == ''
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,53 +29,3 @@ jobs:
           name: CameraStream-Windows
           path: dist/windows/CameraStream-Windows.zip
           if-no-files-found: error
-
-  kenny-build:
-    if: github.event_name == 'workflow_dispatch' && inputs.workspaces_b64 != ''
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: windows-port
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Decode bundled Kenny files
-        shell: pwsh
-        env:
-          WORKSPACES_B64: ${{ inputs.workspaces_b64 }}
-          CREDENTIALS_B64: ${{ inputs.credentials_b64 }}
-        run: |
-          $ErrorActionPreference = "Stop"
-          $bundleDir = Join-Path $env:GITHUB_WORKSPACE "kenny-bundle"
-          New-Item -ItemType Directory -Force -Path $bundleDir | Out-Null
-
-          $workspaces = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:WORKSPACES_B64))
-          $credentials = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:CREDENTIALS_B64))
-
-          [System.IO.File]::WriteAllText((Join-Path $bundleDir "kenny-workspaces.json"), $workspaces)
-          [System.IO.File]::WriteAllText((Join-Path $bundleDir "kenny-credentials.json"), $credentials)
-
-      - name: Build Kenny Windows zip
-        shell: pwsh
-        run: |
-          Set-Location windows
-          ./package-kenny-windows-ci.ps1 `
-            -WorkspacesPath (Join-Path $env:GITHUB_WORKSPACE "kenny-bundle\kenny-workspaces.json") `
-            -CredentialsPath (Join-Path $env:GITHUB_WORKSPACE "kenny-bundle\kenny-credentials.json")
-
-      - name: Upload Kenny zip artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: kenny-CameraStream-Windows
-          path: dist/windows/kenny-CameraStream-Windows.zip
-          if-no-files-found: error
-
-      - name: Remove bundled credentials from runner
-        if: always()
-        shell: pwsh
-        run: |
-          Remove-Item -Recurse -Force (Join-Path $env:GITHUB_WORKSPACE "kenny-bundle") -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force (Join-Path $env:GITHUB_WORKSPACE "windows\publish") -ErrorAction SilentlyContinue

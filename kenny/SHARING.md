@@ -21,11 +21,15 @@ git checkout windows-port   # or pull latest windows-port
 ./package-kenny-windows.sh
 ```
 
-Requires [GitHub CLI](https://cli.github.com/) (`brew install gh`, then `gh auth login`).
-
 Output: `dist/windows/kenny-CameraStream-Windows.zip`
 
-This bundles the same Kenny workspaces and credentials as the DMG, builds the Windows app on GitHub Actions, and downloads the zip to your Mac. Send that zip privately to Windows colleagues — they extract it and run **Install Kenny Camera Stream.bat**.
+This script bundles the same Kenny workspaces and credentials as the DMG **entirely on your Mac**. It downloads the latest credential-free `CameraStream-Windows` artifact from GitHub Actions, then adds `kenny-workspaces.json`, `kenny-credentials.json`, and **Install Kenny Camera Stream.bat** locally. **Credentials never leave your machine** — they are not sent to GitHub.
+
+Requires [GitHub CLI](https://cli.github.com/) (`brew install gh`, then `gh auth login`) to download the Windows app artifact.
+
+> **Previous approach (removed):** An earlier version of this script base64-encoded workspaces and credentials and passed them to GitHub Actions `workflow_dispatch`. That sent secrets to GitHub and has been removed. Always use the current local-only script.
+
+Send the resulting zip privately to Windows colleagues — they extract it and run **Install Kenny Camera Stream.bat**.
 
 ---
 
