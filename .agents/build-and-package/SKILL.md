@@ -17,6 +17,8 @@ cd CameraStreamApp
 
 Output: `dist/Camera Stream.app`, `dist/Camera-Stream.dmg`
 
+For Kenny Windows zip from Mac, see `.agents/package-kenny-windows/SKILL.md`.
+
 ## csshX vendoring
 
 `Vendor/csshX` must exist before packaging. If missing, `package-dmg.sh` copies from Homebrew (`brew install csshx`) and patches the Perl shebang to `#!/usr/bin/env perl`.
