@@ -1,0 +1,18 @@
+<UserControl x:Class="CameraStream.Windows.Views.SecureTextBox"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Root"
+             Loaded="Root_Loaded">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <PasswordBox x:Name="PasswordBox" Grid.Column="0" PasswordChanged="PasswordBox_PasswordChanged" />
+        <TextBox x:Name="TextBox" Grid.Column="0" TextChanged="TextBox_TextChanged" Visibility="Collapsed" />
+
+        <ToggleButton x:Name="RevealButton" Grid.Column="1" Content="Show" Margin="4,0,0,0"
+                      IsChecked="{Binding IsRevealed, ElementName=Root, Mode=TwoWay}" />
+    </Grid>
+</UserControl>

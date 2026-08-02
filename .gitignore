@@ -24,6 +24,16 @@ sandbox/credentials.local.json
 *.swp
 *~
 
+# Windows / .NET
+windows/**/bin/
+windows/**/obj/
+windows/**/publish/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.vs/
+
 # Editor / IDE
 .idea/
 *.code-workspace
