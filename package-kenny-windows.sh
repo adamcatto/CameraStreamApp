@@ -72,7 +72,7 @@ if ! python3 -m json.tool "$credentials_source" >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! python3 - "$workspaces_source" "$credentials_source" "$bundle_file" <<'PY'
+if python3 - "$workspaces_source" "$credentials_source" "$bundle_file" <<'PY'
 import json, sys
 workspaces = json.load(open(sys.argv[1]))
 raw = json.load(open(sys.argv[2]))
