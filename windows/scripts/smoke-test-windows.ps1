@@ -7,10 +7,10 @@ $publishDir = Join-Path $root "publish"
 $required = @(
     "CameraStream.Windows.exe",
     "CameraSSHAskpass.cmd",
-    "CameraSSHAskpass.ps1",
-    "libvlc.dll",
-    "LibVLCSharp.dll"
+    "CameraSSHAskpass.ps1"
 )
+
+# LibVLC native/managed DLLs are embedded when publishing as a single self-contained exe.
 
 $missing = $required | Where-Object { -not (Test-Path (Join-Path $publishDir $_)) }
 
