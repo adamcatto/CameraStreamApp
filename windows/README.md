@@ -33,6 +33,8 @@ From a PowerShell prompt in `windows/`:
 
 The output zips are written to `dist/windows/`.
 
+CI on GitHub Actions runs `package-windows.ps1` (including the smoke test) on every push to `windows-port`. Download the built zip from the workflow run's **Artifacts** tab.
+
 ## Install
 
 1. Extract the zip.

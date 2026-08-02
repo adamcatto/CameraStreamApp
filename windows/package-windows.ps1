@@ -36,6 +36,9 @@ function Package() {
     Write-Host "Created $zip"
 }
 
+$smokeTest = Join-Path $root "scripts" "smoke-test-windows.ps1"
+
 Clean
 Build
+& $smokeTest
 Package
