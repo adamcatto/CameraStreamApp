@@ -60,6 +60,10 @@ cp sandbox/workspaces.example.json sandbox/workspaces.local.json
 
 This imports into `~/Library/Application Support/CameraStream/workspaces.json` for app testing.
 
+## Windows port
+
+A native Windows build lives in the `windows/` directory on the `windows-port` branch. It targets WPF on .NET 8 and uses LibVLC for H.264 playback. See [windows/README.md](windows/README.md) for build and install instructions.
+
 ## Logs
 
 `~/Library/Application Support/CameraStream/streaming.log` — SSH diagnostics only; no passwords.
