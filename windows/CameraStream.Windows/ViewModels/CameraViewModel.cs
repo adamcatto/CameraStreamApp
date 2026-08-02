@@ -32,6 +32,8 @@ namespace CameraStream.Windows.ViewModels
             set { Model.Port = value; OnPropertyChanged(); }
         }
 
+        public string CredentialAccount => Model.CredentialAccount;
+
         public CameraViewModel(CameraEndpoint model, CredentialStore credentials)
         {
             Model = model;
