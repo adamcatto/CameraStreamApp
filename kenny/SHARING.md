@@ -13,6 +13,20 @@ Output: `dist/kenny-Camera-Stream.dmg`
 
 Credentials are read from `kenny/credentials.local.json` (gitignored). Workspaces come from Application Support or `sandbox/workspaces.local.json`.
 
+### Windows zip for colleagues (build from your Mac)
+
+```sh
+cd CameraStreamApp
+git checkout windows-port   # or pull latest windows-port
+./package-kenny-windows.sh
+```
+
+Requires [GitHub CLI](https://cli.github.com/) (`brew install gh`, then `gh auth login`).
+
+Output: `dist/windows/kenny-CameraStream-Windows.zip`
+
+This bundles the same Kenny workspaces and credentials as the DMG, builds the Windows app on GitHub Actions, and downloads the zip to your Mac. Send that zip privately to Windows colleagues — they extract it and run **Install Kenny Camera Stream.bat**.
+
 ---
 
 ## On your Mac — share the file
