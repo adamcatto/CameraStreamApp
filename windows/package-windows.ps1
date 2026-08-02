@@ -30,10 +30,14 @@ function Build() {
 }
 
 function Package() {
-    New-Item -ItemType Directory -Path $appDir -Force | Out-Null
-    Copy-Item (Join-Path $root "Install Camera Stream.bat") $publishDir
-    Copy-Item "$publishDir\*" $appDir -Recurse -Force
-    Compress-Archive -Path "$appDir\*" -DestinationPath $zip -Force
+    $bundleRoot = Join-Path $distDir "CameraStream-Windows-bundle"
+    $appSub = Join-Path $bundleRoot "CameraStream"
+    New-Item -ItemType Directory -Path $appSub -Force | Out-Null
+    Copy-Item "$publishDir\*" $appSub -Recurse -Force
+    Copy-Item (Join-Path $root "Install Camera Stream.bat") $bundleRoot
+    Copy-Item (Join-Path $root "Run Camera Stream.bat") $bundleRoot
+    Compress-Archive -Path "$bundleRoot\*" -DestinationPath $zip -Force
+    Remove-Item $bundleRoot -Recurse -Force
     Write-Host "Created $zip"
 }
 

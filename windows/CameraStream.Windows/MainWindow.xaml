@@ -59,8 +59,12 @@
 
             <ContentControl Grid.Row="1">
                 <Grid>
-                    <views:WorkspaceEditorView DataContext="{Binding SelectedWorkspace}"
-                                               Visibility="{Binding IsWorkspaceEditorVisible, Converter={StaticResource BoolToVis}}" />
+                    <views:WorkspaceEditorView DataContext="{Binding SelectedWorkspace}">
+                        <views:WorkspaceEditorView.Visibility>
+                            <Binding Path="IsWorkspaceEditorVisible" RelativeSource="{RelativeSource AncestorType=Window}"
+                                     Converter="{StaticResource BoolToVis}" />
+                        </views:WorkspaceEditorView.Visibility>
+                    </views:WorkspaceEditorView>
                     <views:StreamGridView DataContext="{Binding}"
                                           Visibility="{Binding IsStreamGridVisible, Converter={StaticResource BoolToVis}}" />
                     <views:SettingsView DataContext="{Binding}"

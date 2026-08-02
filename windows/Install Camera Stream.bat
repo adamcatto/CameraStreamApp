@@ -1,29 +1,25 @@
 @echo off
 setlocal
-set "SOURCE=%~dp0"
+set "SOURCE=%~dp0CameraStream"
 set "DEST=%LOCALAPPDATA%\CameraStream"
 
 echo Installing from: %SOURCE%
 echo Installing to:   %DEST%
 echo.
 
-if not exist "%SOURCE%CameraStream.Windows.exe" (
-    echo ERROR: CameraStream.Windows.exe was not found next to this installer.
+if not exist "%SOURCE%\CameraStream.Windows.exe" (
+    echo ERROR: CameraStream.Windows.exe was not found in the CameraStream folder.
     echo.
-    echo Make sure you extracted the full zip first. This folder should contain
-    echo CameraStream.Windows.exe, several .dll files, and this .bat file.
+    echo Extract the full zip first. The folder next to this installer should contain:
+    echo   CameraStream\CameraStream.Windows.exe
     echo.
-    dir "%SOURCE%"
+    dir "%~dp0"
     pause
     exit /b 1
 )
 
-echo Files in the install folder:
-dir /b "%SOURCE%"
-echo.
-
 if not exist "%DEST%" mkdir "%DEST%"
-robocopy "%SOURCE%." "%DEST%" /E /NFL /NDL /NJH /NJS /NC /NS /NP
+robocopy "%SOURCE%" "%DEST%" /E /NFL /NDL /NJH /NJS /NC /NS /NP
 set "ROBOCOPY_EXIT=%ERRORLEVEL%"
 if %ROBOCOPY_EXIT% GEQ 8 (
     echo ERROR: robocopy failed with exit code %ROBOCOPY_EXIT%.
@@ -32,12 +28,8 @@ if %ROBOCOPY_EXIT% GEQ 8 (
 )
 
 if not exist "%DEST%\CameraStream.Windows.exe" (
-    echo ERROR: Install finished but CameraStream.Windows.exe is missing in:
-    echo   %DEST%
-    echo.
-    echo Windows Security may have removed it. Check Protection history, then try
-    echo running CameraStream.Windows.exe directly from the extracted zip folder.
-    echo.
+    echo ERROR: Install finished but CameraStream.Windows.exe is missing in %DEST%.
+    echo Check Windows Security protection history, then try Run Camera Stream.bat instead.
     dir "%DEST%"
     pause
     exit /b 1

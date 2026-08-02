@@ -41,5 +41,6 @@ Share that zip privately (encrypted zip recommended).
 ## Colleague (Windows)
 
 1. Extract All
-2. Run **Install Kenny Camera Stream.bat**
-3. Connect to lab VPN, pick a workspace, stream
+2. Run **Install Kenny Camera Stream.bat** (installs to AppData) or **Run Camera Stream.bat** (no install)
+3. App files live in the **CameraStream** subfolder; launchers stay at the zip root
+4. Connect to lab VPN, pick a workspace, stream

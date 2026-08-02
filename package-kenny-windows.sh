@@ -189,13 +189,20 @@ fi
 cp "$workspaces_source" "$app_dir/kenny-workspaces.json"
 cp "$bundle_file" "$app_dir/kenny-credentials.json"
 chmod 600 "$app_dir/kenny-credentials.json"
-cp "$kenny_bat" "$app_dir/Install Kenny Camera Stream.bat"
+
+bundle_root="$(mktemp -d "${TMPDIR:-/tmp}/kenny-windows-bundle.XXXXXX")"
+app_payload="$bundle_root/CameraStream"
+mkdir -p "$app_payload"
+cp -R "$app_dir"/. "$app_payload/"
+cp "$kenny_bat" "$bundle_root/"
+cp "$root/windows/Run Camera Stream.bat" "$bundle_root/"
 
 rm -f "$output_zip"
 (
-  cd "$app_dir"
+  cd "$bundle_root"
   zip -qr "$output_zip" .
 )
+rm -rf "$bundle_root"
 
 if [[ ! -f "$output_zip" ]]; then
   echo "Failed to create $output_zip" >&2
@@ -215,3 +222,5 @@ echo
 echo "Credentials were bundled locally on this Mac only."
 echo "Send this zip privately to your Windows colleague."
 echo "They should extract it and double-click: Install Kenny Camera Stream.bat"
+echo "Or use Run Camera Stream.bat to launch without installing."
+echo "Zip layout: Install Kenny Camera Stream.bat, Run Camera Stream.bat, CameraStream\\"
