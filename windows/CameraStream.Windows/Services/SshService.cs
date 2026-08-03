@@ -88,6 +88,10 @@ namespace CameraStream.Windows.Services
             psi.ArgumentList.Add("PreferredAuthentications=password");
             psi.ArgumentList.Add("-o");
             psi.ArgumentList.Add("PasswordAuthentication=yes");
+            psi.ArgumentList.Add("-o");
+            psi.ArgumentList.Add("KbdInteractiveAuthentication=yes");
+            psi.ArgumentList.Add("-o");
+            psi.ArgumentList.Add("NumberOfPasswordPrompts=12");
         }
 
         public Process StartLaunch(CameraEndpoint camera, string? jumpHost, string? credentialFile,
@@ -119,13 +123,13 @@ namespace CameraStream.Windows.Services
             return process;
         }
 
-        public async Task RunCommandAsync(CameraEndpoint camera, string? jumpHost, string? credentialFile,
+        public async Task<int> RunCommandAsync(CameraEndpoint camera, string? jumpHost, string? credentialFile,
             string command, Action<string>? onLog, CancellationToken ct)
         {
             if (!IsAvailable)
             {
                 onLog?.Invoke("SSH not available");
-                return;
+                return 1;
             }
 
             var psi = BuildProcessStartInfo(camera, jumpHost, command, credentialFile);
@@ -150,6 +154,64 @@ namespace CameraStream.Windows.Services
             process.BeginErrorReadLine();
 
             await Task.Run(() => process.WaitForExit(), ct);
+            onLog?.Invoke($"exited with status {process.ExitCode}");
+            return process.ExitCode;
+        }
+
+        public async Task<int> RunCommandViaJumpShellAsync(
+            CameraEndpoint camera,
+            string jumpHost,
+            string? credentialFile,
+            string remoteCommand,
+            Action<string>? onLog,
+            CancellationToken ct)
+        {
+            if (!IsAvailable || SshPath == null)
+            {
+                onLog?.Invoke("SSH not available");
+                return 1;
+            }
+
+            var escaped = remoteCommand.Replace("'", "'\\''");
+            var wrapped = $"ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes {camera.Address} '{escaped}'";
+
+            var psi = new ProcessStartInfo(SshPath)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true
+            };
+
+            AddCommonOptions(psi);
+            psi.ArgumentList.Add(jumpHost);
+            psi.ArgumentList.Add(wrapped);
+
+            SetEnvironment(psi, jumpHost, credentialFile);
+
+            using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+
+            if (onLog != null)
+            {
+                process.OutputDataReceived += (s, e) =>
+                {
+                    if (e.Data != null)
+                        onLog(e.Data);
+                };
+                process.ErrorDataReceived += (s, e) =>
+                {
+                    if (e.Data != null)
+                        onLog(e.Data);
+                };
+            }
+
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            await Task.Run(() => process.WaitForExit(), ct);
+            onLog?.Invoke($"jump-shell exited with status {process.ExitCode}");
+            return process.ExitCode;
         }
 
         public Process StartTunnel(CameraEndpoint camera, int remotePort, int localPort, string jumpHost,
@@ -168,14 +230,12 @@ namespace CameraStream.Windows.Services
 
             AddCommonOptions(psi);
             psi.ArgumentList.Add("-o");
-            psi.ArgumentList.Add("ExitOnForwardFailure=yes");
-            psi.ArgumentList.Add("-o");
             psi.ArgumentList.Add("ServerAliveInterval=30");
             psi.ArgumentList.Add("-o");
             psi.ArgumentList.Add("ServerAliveCountMax=3");
             psi.ArgumentList.Add("-N");
             psi.ArgumentList.Add("-L");
-            psi.ArgumentList.Add($"{localPort}:{camera.Host}:{remotePort}");
+            psi.ArgumentList.Add($"127.0.0.1:{localPort}:{camera.Host}:{remotePort}");
             psi.ArgumentList.Add(jumpHost);
 
             SetEnvironment(psi, jumpHost, credentialFile);

@@ -59,7 +59,14 @@ namespace CameraStream.Windows.Services
             Stop();
             _cts = new CancellationTokenSource();
             _activeWorkspace = workspace;
-            _credentialFile = AskpassHelper.CreateCredentialsFile(GetCredentials(workspace));
+            var sessionCredentials = GetCredentials(workspace);
+            _credentialFile = AskpassHelper.CreateCredentialsFile(sessionCredentials);
+            LogService.Write($"[credentials] loaded {sessionCredentials.Count} accounts for this session");
+            if (!string.IsNullOrEmpty(workspace.JumpHost))
+            {
+                var hasJump = sessionCredentials.ContainsKey(workspace.JumpHost);
+                LogService.Write($"[credentials] jump host {workspace.JumpHost} present={hasJump}");
+            }
 
             await _dispatcher.InvokeAsync(() =>
             {
@@ -73,6 +80,20 @@ namespace CameraStream.Windows.Services
                 try
                 {
                     var usesJumpHost = !string.IsNullOrEmpty(workspace.JumpHost);
+                    var launchSuccessCount = 0;
+
+                    if (usesJumpHost)
+                    {
+                        var tunnelCount = await OpenJumpHostTunnelsAsync(workspace, _cts.Token);
+                        if (tunnelCount == 0)
+                        {
+                            await SetStatusAsync("Error: no jump-host tunnels could be opened");
+                            return;
+                        }
+
+                        LogService.Write($"[tunnel] {tunnelCount}/{workspace.Cameras.Count} local listeners ready");
+                    }
+
                     for (int i = 0; i < workspace.Cameras.Count; i++)
                     {
                         if (_cts.IsCancellationRequested)
@@ -81,7 +102,13 @@ namespace CameraStream.Windows.Services
                         if (usesJumpHost)
                         {
                             await SetStatusAsync($"Starting camera {i + 1}/{workspace.Cameras.Count}...");
-                            await LaunchAndWaitAsync(workspace.Cameras[i], i, workspace.JumpHost, _cts.Token);
+                            var exitCode = await LaunchAndWaitAsync(workspace.Cameras[i], i, workspace.JumpHost, _cts.Token);
+                            if (exitCode == 0)
+                                launchSuccessCount++;
+                            else
+                                LogService.Write($"[launch {workspace.Cameras[i].Address}] failed with exit code {exitCode}");
+
+                            await Task.Delay(800, _cts.Token);
                         }
                         else
                         {
@@ -89,19 +116,15 @@ namespace CameraStream.Windows.Services
                         }
                     }
 
-                    await Task.Delay(usesJumpHost ? 2000 : 3000, _cts.Token);
+                    await Task.Delay(usesJumpHost ? 5000 : 3000, _cts.Token);
 
                     if (_cts.IsCancellationRequested)
                         return;
 
                     if (usesJumpHost)
                     {
-                        var readyCount = await OpenJumpHostTunnelsAsync(workspace, _cts.Token);
-                        if (readyCount == 0)
-                        {
-                            await SetStatusAsync("Error: no jump-host tunnels could be opened");
-                            return;
-                        }
+                        if (launchSuccessCount == 0)
+                            LogService.Write("[launch] no camera encoders reported a successful start");
 
                         await Task.Delay(1000, _cts.Token);
 
@@ -116,7 +139,7 @@ namespace CameraStream.Windows.Services
                         });
 
                         await _dispatcher.InvokeAsync(() =>
-                            Status = $"Streaming {readyCount}/{workspace.Cameras.Count} cameras");
+                            Status = $"Streaming {workspace.Cameras.Count} cameras ({launchSuccessCount} encoders started)");
                     }
                     else
                     {
@@ -233,9 +256,17 @@ namespace CameraStream.Windows.Services
                 msg => LogService.Write($"[launch {camera.Address}] {msg}"));
         }
 
-        private async Task LaunchAndWaitAsync(CameraEndpoint camera, int index, string? jumpHost, CancellationToken ct)
+        private async Task<int> LaunchAndWaitAsync(CameraEndpoint camera, int index, string? jumpHost, CancellationToken ct)
         {
-            await _ssh.RunCommandAsync(camera, jumpHost, _credentialFile, BuildLaunchCommand(index),
+            var command = BuildLaunchCommand(index);
+            var exitCode = await _ssh.RunCommandAsync(camera, jumpHost, _credentialFile, command,
+                msg => LogService.Write($"[launch {camera.Address}] {msg}"), ct);
+
+            if (exitCode == 0 || string.IsNullOrEmpty(jumpHost))
+                return exitCode;
+
+            LogService.Write($"[launch {camera.Address}] retrying via jump-shell SSH");
+            return await _ssh.RunCommandViaJumpShellAsync(camera, jumpHost, _credentialFile, command,
                 msg => LogService.Write($"[launch {camera.Address}] {msg}"), ct);
         }
 
@@ -273,16 +304,24 @@ namespace CameraStream.Windows.Services
 
                 _tunnels.Add(process);
 
-                if (await WaitForLocalListenerAsync(localPort, process, TimeSpan.FromSeconds(12), ct))
+                if (await WaitForLocalListenerAsync(localPort, process, TimeSpan.FromSeconds(8), ct))
                 {
                     readyCount++;
                 }
                 else
                 {
                     LogService.Write($"[tunnel {localPort}] failed to establish listener");
+                    try
+                    {
+                        if (!process.HasExited)
+                            process.Kill();
+                    }
+                    catch
+                    {
+                    }
                 }
 
-                await Task.Delay(500, ct);
+                await Task.Delay(400, ct);
             }
 
             return readyCount;
