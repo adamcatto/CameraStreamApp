@@ -68,6 +68,8 @@ namespace CameraStream.Windows.Services
                 LogService.Write($"[credentials] jump host {workspace.JumpHost} present={hasJump}");
             }
 
+            LogService.Write($"[ssh] using {_ssh.SshPath ?? "missing"} with askpass {_ssh.AskpassPath ?? "missing"}");
+
             await _dispatcher.InvokeAsync(() =>
             {
                 IsStreaming = true;
@@ -281,7 +283,7 @@ namespace CameraStream.Windows.Services
                    "elif command -v raspivid >/dev/null 2>&1; then c=$(command -v raspivid); " +
                    "else exit 127; fi; " +
                    $"if [ \"${{c##*/}}\" = raspivid ]; then nohup \"$c\" -md 4 -ss 20000 -ISO 32 -w 1640 -h 1232 -fps 30 -ih -n -l -o tcp://0.0.0.0:{port} -t 0 >/tmp/camera-stream.log 2>&1 & " +
-                   $"else nohup \"$c\" --shutter 20000 --gain 32 --brightness 0.2 --width 1920 --height 1080 --codec h264 --framerate 30 --autofocus-mode auto --lens-position 3 --inline --listen -o tcp://0.0.0.0:{port} -t 0 >/tmp/camera-stream.log 2>&1 & fi";
+                   $"else nohup \"$c\" --shutter 20000 --gain 32 --brightness 0.2 --width 1920 --height 1080 --codec h264 --framerate 30 --autofocus-mode auto --lens-position 3 --inline --listen -o tcp://0.0.0.0:{port} -t 0 >/tmp/camera-stream.log 2>&1 & fi; true";
         }
 
         private async Task<int> OpenJumpHostTunnelsAsync(CameraWorkspace workspace, CancellationToken ct)

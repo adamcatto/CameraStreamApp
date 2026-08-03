@@ -6,6 +6,7 @@ $publishDir = Join-Path $root "publish"
 
 $required = @(
     "CameraStream.Windows.exe",
+    "CameraSSHAskpass.exe",
     "CameraSSHAskpass.cmd",
     "CameraSSHAskpass.ps1",
     "LibVLCSharp.dll",

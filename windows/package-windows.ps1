@@ -27,6 +27,15 @@ function Build() {
     if ($LASTEXITCODE -ne 0) {
         throw "dotnet publish failed"
     }
+
+    $askpassProject = Join-Path $root "CameraSSHAskpass\CameraSSHAskpass.csproj"
+    dotnet publish $askpassProject -c Release -r win-x64 --self-contained true `
+        -p:PublishSingleFile=true `
+        -o $publishDir
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "CameraSSHAskpass publish failed"
+    }
 }
 
 function Package() {

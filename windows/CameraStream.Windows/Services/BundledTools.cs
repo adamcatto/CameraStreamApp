@@ -34,9 +34,9 @@ namespace CameraStream.Windows.Services
             else
                 parts.Add("OpenSSH (not found)");
 
-            var askpass = GetBundledPath("CameraSSHAskpass.cmd");
+            var askpass = GetBundledPath("CameraSSHAskpass.exe") ?? GetBundledPath("CameraSSHAskpass.cmd");
             if (!string.IsNullOrEmpty(askpass))
-                parts.Add("CameraSSHAskpass (bundled)");
+                parts.Add($"CameraSSHAskpass ({askpass})");
             else
                 parts.Add("CameraSSHAskpass (missing)");
 

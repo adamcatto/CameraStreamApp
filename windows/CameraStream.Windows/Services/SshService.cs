@@ -19,6 +19,8 @@ namespace CameraStream.Windows.Services
         {
             SshPath = FindSsh();
             AskpassPath = FindAskpass();
+            if (!string.IsNullOrEmpty(AskpassPath))
+                LogService.Write($"[ssh] askpass helper: {AskpassPath}");
         }
 
         private static string? FindSsh()
@@ -53,7 +55,18 @@ namespace CameraStream.Windows.Services
 
         private static string? FindAskpass()
         {
-            var name = "CameraSSHAskpass.cmd";
+            foreach (var name in new[] { "CameraSSHAskpass.exe", "CameraSSHAskpass.cmd" })
+            {
+                var path = GetBundledPath(name);
+                if (path != null)
+                    return path;
+            }
+
+            return null;
+        }
+
+        private static string? GetBundledPath(string name)
+        {
             var baseDir = AppContext.BaseDirectory;
             var path = Path.Combine(baseDir, name);
             if (File.Exists(path))
@@ -323,6 +336,7 @@ namespace CameraStream.Windows.Services
             {
                 psi.Environment["SSH_ASKPASS"] = AskpassPath;
                 psi.Environment["SSH_ASKPASS_REQUIRE"] = "force";
+                psi.Environment["DISPLAY"] = "1";
             }
 
             psi.Environment["CAMERA_STREAM_KEYCHAIN_ACCOUNT"] = account;

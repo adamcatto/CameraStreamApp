@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using System.Text;
 using System.Text.Json;
 
 namespace CameraStream.Windows.Services
@@ -16,7 +17,7 @@ namespace CameraStream.Windows.Services
 
             var path = Path.Combine(Path.GetTempPath(), $"camera-stream-{Guid.NewGuid()}.json");
             var json = JsonSerializer.Serialize(credentials);
-            File.WriteAllText(path, json);
+            File.WriteAllText(path, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             try
             {
