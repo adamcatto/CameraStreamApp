@@ -188,7 +188,6 @@ fi
 
 cp "$workspaces_source" "$app_dir/kenny-workspaces.json"
 cp "$bundle_file" "$app_dir/kenny-credentials.json"
-chmod 600 "$app_dir/kenny-credentials.json"
 
 bundle_root="$(mktemp -d "${TMPDIR:-/tmp}/kenny-windows-bundle.XXXXXX")"
 app_payload="$bundle_root/CameraStream"

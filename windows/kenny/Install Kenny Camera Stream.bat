@@ -31,11 +31,25 @@ if not exist "%SOURCE%\kenny-credentials.json" (
     exit /b 1
 )
 
+taskkill /IM CameraStream.Windows.exe /F >nul 2>&1
+
 if not exist "%DEST%" mkdir "%DEST%"
+
+if exist "%DEST%\kenny-credentials.json" (
+    echo Updating existing install ...
+    attrib -R "%DEST%\kenny-credentials.json" >nul 2>&1
+    icacls "%DEST%\kenny-credentials.json" /inheritance:e >nul 2>&1
+    icacls "%DEST%\kenny-credentials.json" /grant "%USERNAME%:F" >nul 2>&1
+    del /f /q "%DEST%\kenny-credentials.json" >nul 2>&1
+)
+
 robocopy "%SOURCE%" "%DEST%" /E /NFL /NDL /NJH /NJS /NC /NS /NP
 set "ROBOCOPY_EXIT=%ERRORLEVEL%"
 if %ROBOCOPY_EXIT% GEQ 8 (
     echo ERROR: robocopy failed with exit code %ROBOCOPY_EXIT%.
+    if exist "%DEST%\kenny-credentials.json" (
+        echo Could not update kenny-credentials.json. Close Camera Stream and try again.
+    )
     pause
     exit /b 1
 )
@@ -50,8 +64,8 @@ if not exist "%DEST%\CameraStream.Windows.exe" (
 
 echo Restricting bundled credentials to your user account ...
 if exist "%DEST%\kenny-credentials.json" (
-    icacls "%DEST%\kenny-credentials.json" /inheritance:r >nul
-    icacls "%DEST%\kenny-credentials.json" /grant:r "%USERNAME%:(R)" >nul
+    icacls "%DEST%\kenny-credentials.json" /inheritance:r >nul 2>&1
+    icacls "%DEST%\kenny-credentials.json" /grant:r "%USERNAME%:(R)" >nul 2>&1
 )
 
 echo Done. Starting Camera Stream...
