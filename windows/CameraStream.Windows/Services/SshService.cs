@@ -146,14 +146,17 @@ namespace CameraStream.Windows.Services
             await Task.Run(() => process.WaitForExit(), ct);
         }
 
-        public Process StartTunnel(CameraEndpoint camera, int remotePort, int localPort, string jumpHost,
-            string? credentialFile, Action<string>? onLog)
+        public Process StartJumpHostTunnels(
+            IReadOnlyList<(CameraEndpoint camera, int remotePort, int localPort)> forwards,
+            string jumpHost,
+            string? credentialFile,
+            Action<string>? onLog)
         {
-            if (!IsAvailable)
+            if (!IsAvailable || SshPath == null)
                 throw new InvalidOperationException("SSH not available");
 
-            if (SshPath == null)
-                throw new InvalidOperationException("SSH not available");
+            if (forwards.Count == 0)
+                throw new ArgumentException("At least one tunnel forward is required.", nameof(forwards));
 
             var psi = new ProcessStartInfo(SshPath)
             {
@@ -165,10 +168,17 @@ namespace CameraStream.Windows.Services
 
             AddCommonOptions(psi);
             psi.ArgumentList.Add("-o");
-            psi.ArgumentList.Add("ExitOnForwardFailure=yes");
+            psi.ArgumentList.Add("ServerAliveInterval=30");
+            psi.ArgumentList.Add("-o");
+            psi.ArgumentList.Add("ServerAliveCountMax=3");
+
+            foreach (var (camera, remotePort, localPort) in forwards)
+            {
+                psi.ArgumentList.Add("-L");
+                psi.ArgumentList.Add($"{localPort}:{camera.Host}:{remotePort}");
+            }
+
             psi.ArgumentList.Add("-N");
-            psi.ArgumentList.Add("-L");
-            psi.ArgumentList.Add($"{localPort}:{camera.Host}:{remotePort}");
             psi.ArgumentList.Add(jumpHost);
 
             SetEnvironment(psi, jumpHost, credentialFile);
@@ -177,14 +187,24 @@ namespace CameraStream.Windows.Services
 
             if (onLog != null)
             {
+                process.OutputDataReceived += (s, e) =>
+                {
+                    if (e.Data != null)
+                        onLog(e.Data);
+                };
                 process.ErrorDataReceived += (s, e) =>
                 {
                     if (e.Data != null)
                         onLog(e.Data);
                 };
+                process.Exited += (s, e) =>
+                {
+                    onLog($"tunnel session exited with status {process.ExitCode}");
+                };
             }
 
             process.Start();
+            process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
             return process;

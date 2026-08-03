@@ -23,7 +23,23 @@ if (-not $account) {
     exit 1
 }
 
-$password = $json.PSObject.Properties[$account].Value
+$password = $null
+foreach ($property in $json.PSObject.Properties) {
+    if ($property.Name -eq $account) {
+        $password = $property.Value
+        break
+    }
+}
+
+if (-not $password -and $fallback) {
+    foreach ($property in $json.PSObject.Properties) {
+        if ($property.Name -eq $fallback) {
+            $password = $property.Value
+            break
+        }
+    }
+}
+
 if (-not $password) {
     exit 1
 }

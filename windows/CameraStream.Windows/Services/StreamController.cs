@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -70,12 +71,16 @@ namespace CameraStream.Windows.Services
             {
                 try
                 {
+                    var usesJumpHost = !string.IsNullOrEmpty(workspace.JumpHost);
                     for (int i = 0; i < workspace.Cameras.Count; i++)
                     {
                         if (_cts.IsCancellationRequested)
                             return;
 
                         Launch(workspace.Cameras[i], i, workspace.JumpHost);
+
+                        if (usesJumpHost)
+                            await Task.Delay(350, _cts.Token);
                     }
 
                     await Task.Delay(3000, _cts.Token);
@@ -83,15 +88,17 @@ namespace CameraStream.Windows.Services
                     if (_cts.IsCancellationRequested)
                         return;
 
-                    if (!string.IsNullOrEmpty(workspace.JumpHost))
+                    if (usesJumpHost)
                     {
-                        for (int i = 0; i < workspace.Cameras.Count; i++)
-                        {
-                            if (_cts.IsCancellationRequested)
-                                return;
+                        var forwards = workspace.Cameras
+                            .Select((camera, index) => (camera, 8888 + index, 18000 + index))
+                            .ToList();
 
-                            OpenTunnel(workspace.Cameras[i], 8888 + i, 18000 + i, workspace.JumpHost);
-                        }
+                        OpenJumpHostTunnels(forwards, workspace.JumpHost!);
+
+                        var ready = await WaitForLocalPortAsync("127.0.0.1", 18000, TimeSpan.FromSeconds(20), _cts.Token);
+                        if (!ready)
+                            LogService.Write("[tunnel] timed out waiting for local port 18000");
 
                         await Task.Delay(500, _cts.Token);
 
@@ -119,7 +126,7 @@ namespace CameraStream.Windows.Services
                     }
 
                     if (!_cts.IsCancellationRequested)
-                        await ResolveCameraNamesAsync(workspace.Cameras, workspace.JumpHost, _cts.Token);
+                        await ResolveCameraNamesAsync(workspace.Cameras, workspace.JumpHost, usesJumpHost, _cts.Token);
 
                     await _dispatcher.InvokeAsync(() => Status = $"Streaming {workspace.Cameras.Count} cameras");
                 }
@@ -220,31 +227,75 @@ namespace CameraStream.Windows.Services
                 msg => LogService.Write($"[launch {camera.Address}] {msg}"));
         }
 
-        private void OpenTunnel(CameraEndpoint camera, int remotePort, int localPort, string jumpHost)
+        private void OpenJumpHostTunnels(
+            IReadOnlyList<(CameraEndpoint camera, int remotePort, int localPort)> forwards,
+            string jumpHost)
         {
-            var process = _ssh.StartTunnel(camera, remotePort, localPort, jumpHost, _credentialFile,
-                msg => LogService.Write($"[tunnel {localPort}] {msg}"));
+            var process = _ssh.StartJumpHostTunnels(forwards, jumpHost, _credentialFile,
+                msg => LogService.Write($"[tunnel] {msg}"));
 
             _tunnels.Add(process);
         }
 
-        private async Task ResolveCameraNamesAsync(List<CameraEndpoint> cameras, string? jumpHost, CancellationToken ct)
+        private static async Task<bool> WaitForLocalPortAsync(string host, int port, TimeSpan timeout, CancellationToken ct)
         {
-            var tasks = cameras.Select(async camera =>
-            {
-                var name = await _ssh.GetCameraNameAsync(camera, jumpHost, _credentialFile, ct);
-                if (!string.IsNullOrWhiteSpace(name))
-                {
-                    await _dispatcher.InvokeAsync(() =>
-                    {
-                        var player = StreamPlayers.FirstOrDefault(p => p.Id == camera.Id);
-                        if (player != null)
-                            player.Name = name.Trim();
-                    });
-                }
-            });
+            var deadline = DateTime.UtcNow + timeout;
 
+            while (DateTime.UtcNow < deadline)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                try
+                {
+                    using var client = new TcpClient();
+                    var connectTask = client.ConnectAsync(host, port);
+                    var completed = await Task.WhenAny(connectTask, Task.Delay(250, ct));
+                    if (completed == connectTask && client.Connected)
+                        return true;
+                }
+                catch
+                {
+                }
+
+                await Task.Delay(250, ct);
+            }
+
+            return false;
+        }
+
+        private async Task ResolveCameraNamesAsync(
+            List<CameraEndpoint> cameras,
+            string? jumpHost,
+            bool serializeJumpHostLookups,
+            CancellationToken ct)
+        {
+            if (serializeJumpHostLookups)
+            {
+                foreach (var camera in cameras)
+                {
+                    await ResolveCameraNameAsync(camera, jumpHost, ct);
+                    await Task.Delay(300, ct);
+                }
+
+                return;
+            }
+
+            var tasks = cameras.Select(camera => ResolveCameraNameAsync(camera, jumpHost, ct));
             await Task.WhenAll(tasks);
+        }
+
+        private async Task ResolveCameraNameAsync(CameraEndpoint camera, string? jumpHost, CancellationToken ct)
+        {
+            var name = await _ssh.GetCameraNameAsync(camera, jumpHost, _credentialFile, ct);
+            if (string.IsNullOrWhiteSpace(name))
+                return;
+
+            await _dispatcher.InvokeAsync(() =>
+            {
+                var player = StreamPlayers.FirstOrDefault(p => p.Id == camera.Id);
+                if (player != null)
+                    player.Name = name.Trim();
+            });
         }
 
         private Dictionary<string, string> GetCredentials(CameraWorkspace workspace)
