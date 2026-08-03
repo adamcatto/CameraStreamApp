@@ -96,15 +96,12 @@ namespace CameraStream.Windows.Services
 
                     if (usesJumpHost)
                     {
-                        var forwards = workspace.Cameras
-                            .Select((camera, index) => (camera, 8888 + index, 18000 + index))
-                            .ToList();
-
-                        var tunnelProcess = OpenJumpHostTunnels(forwards, workspace.JumpHost!);
-
-                        var ready = await WaitForLocalListenerAsync(18000, tunnelProcess, TimeSpan.FromSeconds(30), _cts.Token);
-                        if (!ready)
-                            LogService.Write("[tunnel] local listener not ready on port 18000");
+                        var readyCount = await OpenJumpHostTunnelsAsync(workspace, _cts.Token);
+                        if (readyCount == 0)
+                        {
+                            await SetStatusAsync("Error: no jump-host tunnels could be opened");
+                            return;
+                        }
 
                         await Task.Delay(1000, _cts.Token);
 
@@ -117,6 +114,9 @@ namespace CameraStream.Windows.Services
                                 StreamPlayers.Add(new StreamPlayerViewModel(camera.Id, camera.Name, "127.0.0.1", 18000 + i));
                             }
                         });
+
+                        await _dispatcher.InvokeAsync(() =>
+                            Status = $"Streaming {readyCount}/{workspace.Cameras.Count} cameras");
                     }
                     else
                     {
@@ -129,9 +129,9 @@ namespace CameraStream.Windows.Services
                                 StreamPlayers.Add(new StreamPlayerViewModel(camera.Id, camera.Name, camera.Host, 8888 + i));
                             }
                         });
-                    }
 
-                    await _dispatcher.InvokeAsync(() => Status = $"Streaming {workspace.Cameras.Count} cameras");
+                        await _dispatcher.InvokeAsync(() => Status = $"Streaming {workspace.Cameras.Count} cameras");
+                    }
 
                     if (!_cts.IsCancellationRequested)
                     {
@@ -253,15 +253,39 @@ namespace CameraStream.Windows.Services
                    $"else nohup \"$c\" --shutter 20000 --gain 32 --brightness 0.2 --width 1920 --height 1080 --codec h264 --framerate 30 --autofocus-mode auto --lens-position 3 --inline --listen -o tcp://0.0.0.0:{port} -t 0 >/tmp/camera-stream.log 2>&1 & fi";
         }
 
-        private Process OpenJumpHostTunnels(
-            IReadOnlyList<(CameraEndpoint camera, int remotePort, int localPort)> forwards,
-            string jumpHost)
+        private async Task<int> OpenJumpHostTunnelsAsync(CameraWorkspace workspace, CancellationToken ct)
         {
-            var process = _ssh.StartJumpHostTunnels(forwards, jumpHost, _credentialFile,
-                msg => LogService.Write($"[tunnel] {msg}"));
+            var jumpHost = workspace.JumpHost!;
+            var readyCount = 0;
 
-            _tunnels.Add(process);
-            return process;
+            for (int i = 0; i < workspace.Cameras.Count; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var camera = workspace.Cameras[i];
+                var remotePort = 8888 + i;
+                var localPort = 18000 + i;
+
+                await SetStatusAsync($"Opening tunnel {i + 1}/{workspace.Cameras.Count}...");
+
+                var process = _ssh.StartTunnel(camera, remotePort, localPort, jumpHost, _credentialFile,
+                    msg => LogService.Write($"[tunnel {localPort}] {msg}"));
+
+                _tunnels.Add(process);
+
+                if (await WaitForLocalListenerAsync(localPort, process, TimeSpan.FromSeconds(12), ct))
+                {
+                    readyCount++;
+                }
+                else
+                {
+                    LogService.Write($"[tunnel {localPort}] failed to establish listener");
+                }
+
+                await Task.Delay(500, ct);
+            }
+
+            return readyCount;
         }
 
         private static bool IsLocalPortListening(int port)
