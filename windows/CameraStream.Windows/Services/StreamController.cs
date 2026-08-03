@@ -4,7 +4,8 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
-using System.Net.Sockets;
+using System.Net;
+using System.Net.NetworkInformation;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -77,13 +78,18 @@ namespace CameraStream.Windows.Services
                         if (_cts.IsCancellationRequested)
                             return;
 
-                        Launch(workspace.Cameras[i], i, workspace.JumpHost);
-
                         if (usesJumpHost)
-                            await Task.Delay(350, _cts.Token);
+                        {
+                            await SetStatusAsync($"Starting camera {i + 1}/{workspace.Cameras.Count}...");
+                            await LaunchAndWaitAsync(workspace.Cameras[i], i, workspace.JumpHost, _cts.Token);
+                        }
+                        else
+                        {
+                            Launch(workspace.Cameras[i], i, null);
+                        }
                     }
 
-                    await Task.Delay(3000, _cts.Token);
+                    await Task.Delay(usesJumpHost ? 2000 : 3000, _cts.Token);
 
                     if (_cts.IsCancellationRequested)
                         return;
@@ -94,13 +100,13 @@ namespace CameraStream.Windows.Services
                             .Select((camera, index) => (camera, 8888 + index, 18000 + index))
                             .ToList();
 
-                        OpenJumpHostTunnels(forwards, workspace.JumpHost!);
+                        var tunnelProcess = OpenJumpHostTunnels(forwards, workspace.JumpHost!);
 
-                        var ready = await WaitForLocalPortAsync("127.0.0.1", 18000, TimeSpan.FromSeconds(20), _cts.Token);
+                        var ready = await WaitForLocalListenerAsync(18000, tunnelProcess, TimeSpan.FromSeconds(30), _cts.Token);
                         if (!ready)
-                            LogService.Write("[tunnel] timed out waiting for local port 18000");
+                            LogService.Write("[tunnel] local listener not ready on port 18000");
 
-                        await Task.Delay(500, _cts.Token);
+                        await Task.Delay(1000, _cts.Token);
 
                         await _dispatcher.InvokeAsync(() =>
                         {
@@ -125,10 +131,21 @@ namespace CameraStream.Windows.Services
                         });
                     }
 
-                    if (!_cts.IsCancellationRequested)
-                        await ResolveCameraNamesAsync(workspace.Cameras, workspace.JumpHost, usesJumpHost, _cts.Token);
-
                     await _dispatcher.InvokeAsync(() => Status = $"Streaming {workspace.Cameras.Count} cameras");
+
+                    if (!_cts.IsCancellationRequested)
+                    {
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await ResolveCameraNamesAsync(workspace.Cameras, workspace.JumpHost, usesJumpHost, _cts.Token);
+                            }
+                            catch (OperationCanceledException)
+                            {
+                            }
+                        }, _cts.Token);
+                    }
                 }
                 catch (OperationCanceledException)
                 {
@@ -212,22 +229,31 @@ namespace CameraStream.Windows.Services
 
         private void Launch(CameraEndpoint camera, int index, string? jumpHost)
         {
-            var port = 8888 + index;
-            var command = $"pkill -x libcamera-vid 2>/dev/null || true; " +
-                          $"pkill -x rpicam-vid 2>/dev/null || true; " +
-                          $"pkill -x raspivid 2>/dev/null || true; " +
-                          "if command -v rpicam-vid >/dev/null 2>&1; then c=$(command -v rpicam-vid); " +
-                          "elif command -v libcamera-vid >/dev/null 2>&1; then c=$(command -v libcamera-vid); " +
-                          "elif command -v raspivid >/dev/null 2>&1; then c=$(command -v raspivid); " +
-                          "else exit 127; fi; " +
-                          $"if [ \"${{c##*/}}\" = raspivid ]; then nohup \"$c\" -md 4 -ss 20000 -ISO 32 -w 1640 -h 1232 -fps 30 -ih -n -l -o tcp://0.0.0.0:{port} -t 0 >/tmp/camera-stream.log 2>&1 & " +
-                          $"else nohup \"$c\" --shutter 20000 --gain 32 --brightness 0.2 --width 1920 --height 1080 --codec h264 --framerate 30 --autofocus-mode auto --lens-position 3 --inline --listen -o tcp://0.0.0.0:{port} -t 0 >/tmp/camera-stream.log 2>&1 & fi";
-
-            _ssh.StartLaunch(camera, jumpHost, _credentialFile, command,
+            _ssh.StartLaunch(camera, jumpHost, _credentialFile, BuildLaunchCommand(index),
                 msg => LogService.Write($"[launch {camera.Address}] {msg}"));
         }
 
-        private void OpenJumpHostTunnels(
+        private async Task LaunchAndWaitAsync(CameraEndpoint camera, int index, string? jumpHost, CancellationToken ct)
+        {
+            await _ssh.RunCommandAsync(camera, jumpHost, _credentialFile, BuildLaunchCommand(index),
+                msg => LogService.Write($"[launch {camera.Address}] {msg}"), ct);
+        }
+
+        private static string BuildLaunchCommand(int index)
+        {
+            var port = 8888 + index;
+            return $"pkill -x libcamera-vid 2>/dev/null || true; " +
+                   $"pkill -x rpicam-vid 2>/dev/null || true; " +
+                   $"pkill -x raspivid 2>/dev/null || true; " +
+                   "if command -v rpicam-vid >/dev/null 2>&1; then c=$(command -v rpicam-vid); " +
+                   "elif command -v libcamera-vid >/dev/null 2>&1; then c=$(command -v libcamera-vid); " +
+                   "elif command -v raspivid >/dev/null 2>&1; then c=$(command -v raspivid); " +
+                   "else exit 127; fi; " +
+                   $"if [ \"${{c##*/}}\" = raspivid ]; then nohup \"$c\" -md 4 -ss 20000 -ISO 32 -w 1640 -h 1232 -fps 30 -ih -n -l -o tcp://0.0.0.0:{port} -t 0 >/tmp/camera-stream.log 2>&1 & " +
+                   $"else nohup \"$c\" --shutter 20000 --gain 32 --brightness 0.2 --width 1920 --height 1080 --codec h264 --framerate 30 --autofocus-mode auto --lens-position 3 --inline --listen -o tcp://0.0.0.0:{port} -t 0 >/tmp/camera-stream.log 2>&1 & fi";
+        }
+
+        private Process OpenJumpHostTunnels(
             IReadOnlyList<(CameraEndpoint camera, int remotePort, int localPort)> forwards,
             string jumpHost)
         {
@@ -235,9 +261,22 @@ namespace CameraStream.Windows.Services
                 msg => LogService.Write($"[tunnel] {msg}"));
 
             _tunnels.Add(process);
+            return process;
         }
 
-        private static async Task<bool> WaitForLocalPortAsync(string host, int port, TimeSpan timeout, CancellationToken ct)
+        private static bool IsLocalPortListening(int port)
+        {
+            return IPGlobalProperties.GetIPGlobalProperties()
+                .GetActiveTcpListeners()
+                .Any(endpoint => endpoint.Port == port &&
+                    (IPAddress.IsLoopback(endpoint.Address) || endpoint.Address.Equals(IPAddress.Any)));
+        }
+
+        private static async Task<bool> WaitForLocalListenerAsync(
+            int port,
+            Process tunnel,
+            TimeSpan timeout,
+            CancellationToken ct)
         {
             var deadline = DateTime.UtcNow + timeout;
 
@@ -245,19 +284,16 @@ namespace CameraStream.Windows.Services
             {
                 ct.ThrowIfCancellationRequested();
 
-                try
+                if (tunnel.HasExited)
                 {
-                    using var client = new TcpClient();
-                    var connectTask = client.ConnectAsync(host, port);
-                    var completed = await Task.WhenAny(connectTask, Task.Delay(250, ct));
-                    if (completed == connectTask && client.Connected)
-                        return true;
-                }
-                catch
-                {
+                    LogService.Write($"[tunnel] session exited early with status {tunnel.ExitCode}");
+                    return false;
                 }
 
-                await Task.Delay(250, ct);
+                if (IsLocalPortListening(port))
+                    return true;
+
+                await Task.Delay(200, ct);
             }
 
             return false;

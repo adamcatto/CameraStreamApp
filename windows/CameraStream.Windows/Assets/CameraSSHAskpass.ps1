@@ -13,31 +13,42 @@ try {
     exit 1
 }
 
-$account = $fallback
+$account = $null
 $match = [regex]::Match($prompt, '[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+')
 if ($match.Success) {
     $account = $match.Value
 }
 
 if (-not $account) {
-    exit 1
+    $account = $fallback
 }
 
-$password = $null
-foreach ($property in $json.PSObject.Properties) {
-    if ($property.Name -eq $account) {
-        $password = $property.Value
-        break
+function Get-PasswordForAccount($credentials, $target) {
+    if (-not $target) {
+        return $null
     }
-}
 
-if (-not $password -and $fallback) {
-    foreach ($property in $json.PSObject.Properties) {
-        if ($property.Name -eq $fallback) {
-            $password = $property.Value
-            break
+    foreach ($property in $credentials.PSObject.Properties) {
+        if ($property.Name -eq $target) {
+            return $property.Value
         }
     }
+
+    if ($target -match '@(.+)$') {
+        $hostPart = $matches[1]
+        foreach ($property in $credentials.PSObject.Properties) {
+            if ($property.Name -like "*@$hostPart") {
+                return $property.Value
+            }
+        }
+    }
+
+    return $null
+}
+
+$password = Get-PasswordForAccount $json $account
+if (-not $password -and $fallback -and $fallback -ne $account) {
+    $password = Get-PasswordForAccount $json $fallback
 }
 
 if (-not $password) {

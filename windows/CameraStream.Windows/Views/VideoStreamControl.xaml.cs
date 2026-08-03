@@ -1,10 +1,8 @@
 using System;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using LibVLCSharp.Shared;
-using CameraStream.Windows.Services;
 using CameraStream.Windows.ViewModels;
 
 namespace CameraStream.Windows.Views
@@ -13,8 +11,7 @@ namespace CameraStream.Windows.Views
     {
         private MediaPlayer? _mediaPlayer;
         private Media? _media;
-        private DispatcherTimer? _retryTimer;
-        private int _retryCount;
+        private DispatcherTimer? _startTimer;
         private StreamPlayerViewModel? _viewModel;
 
         public VideoStreamControl()
@@ -31,15 +28,29 @@ namespace CameraStream.Windows.Views
                 return;
 
             _viewModel = vm;
-            StartPlayback(resetRetries: true);
+
+            // rpicam-vid --listen accepts one TCP client per encoder. Do not connect
+            // until tunnels are ready, and never reconnect once playback starts.
+            if (vm.Host == "127.0.0.1")
+            {
+                _startTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+                _startTimer.Tick += (_, _) =>
+                {
+                    StopStartTimer();
+                    StartPlaybackOnce();
+                };
+                _startTimer.Start();
+                return;
+            }
+
+            StartPlaybackOnce();
         }
 
-        private void StartPlayback(bool resetRetries)
+        private void StartPlaybackOnce()
         {
             if (_viewModel == null || App.VlcService == null)
                 return;
 
-            StopRetryTimer();
             _mediaPlayer?.Stop();
             _media?.Dispose();
 
@@ -51,41 +62,20 @@ namespace CameraStream.Windows.Views
             _media.AddOption(":network-caching=150");
 
             _mediaPlayer.Play(_media);
-
-            if (vm.Host != "127.0.0.1")
-                return;
-
-            if (resetRetries)
-                _retryCount = 0;
-
-            _retryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-            _retryTimer.Tick += (_, _) =>
-            {
-                _retryCount++;
-                if (_retryCount > 8)
-                {
-                    StopRetryTimer();
-                    return;
-                }
-
-                LogService.Write($"[player {vm.Port}] retrying tunneled stream");
-                StartPlayback(resetRetries: false);
-            };
-            _retryTimer.Start();
         }
 
-        private void StopRetryTimer()
+        private void StopStartTimer()
         {
-            if (_retryTimer == null)
+            if (_startTimer == null)
                 return;
 
-            _retryTimer.Stop();
-            _retryTimer = null;
+            _startTimer.Stop();
+            _startTimer = null;
         }
 
         private void UserControl_Unloaded(object sender, RoutedEventArgs e)
         {
-            StopRetryTimer();
+            StopStartTimer();
             _viewModel = null;
 
             _mediaPlayer?.Stop();
