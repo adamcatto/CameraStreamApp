@@ -1,0 +1,3 @@
+# Keep GitHub's language statistics focused on code maintained in this repo.
+apps/macos/Vendor/** linguist-vendored
+package-lock.json linguist-generated=true
