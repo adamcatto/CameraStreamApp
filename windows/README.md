@@ -7,6 +7,8 @@ This is a native Windows port of the macOS SwiftUI Camera Stream app. It uses WP
 - Workspace editor (name, jump host, camera list)
 - Live streaming with `tcp/h264://` playback through LibVLC
 - SSH control of remote Raspberry Pi cameras
+- Verified two-stage jump-host SSH: authenticate the jump host first, then probe each camera independently through it
+- Per-camera SSH and H.264 forwarding, so unreachable cameras are skipped without blocking available streams
 - `SSH_ASKPASS` helper using a bundled PowerShell script
 - Session credential management
 - Cluster shell via Windows Terminal (`wt.exe`) with a separate-window fallback
@@ -61,5 +63,6 @@ windows/
 
 - Workspaces and settings are stored in `%LOCALAPPDATA%\CameraStream\`.
 - Streaming logs are written to `%LOCALAPPDATA%\CameraStream\streaming.log`.
+- Jump-host sessions, per-camera SSH results, and skipped cameras are recorded in the streaming log; passwords are never logged.
 - `CameraSSHAskpass.cmd` / `CameraSSHAskpass.ps1` act as the Windows equivalent of the macOS `CameraSSHAskpass` helper. They read the temporary credential JSON created for each streaming session.
 - Unlike the macOS app, this port does not depend on `csshX`; cluster shell uses Windows Terminal split panes or separate `ssh` windows.

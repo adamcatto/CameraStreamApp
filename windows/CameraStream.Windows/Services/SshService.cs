@@ -227,7 +227,68 @@ namespace CameraStream.Windows.Services
             return process.ExitCode;
         }
 
-        public Process StartTunnel(CameraEndpoint camera, int remotePort, int localPort, string jumpHost,
+        public async Task<int> ProbeJumpHostAsync(
+            string jumpHost,
+            string? credentialFile,
+            Action<string>? onLog,
+            CancellationToken ct)
+        {
+            if (!IsAvailable || SshPath == null)
+            {
+                onLog?.Invoke("SSH not available");
+                return 1;
+            }
+
+            var psi = new ProcessStartInfo(SshPath)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true
+            };
+
+            AddCommonOptions(psi);
+            psi.ArgumentList.Add(jumpHost);
+            psi.ArgumentList.Add("printf '__CAMERA_STREAM_JUMP_READY__\\n'");
+            SetEnvironment(psi, jumpHost, credentialFile);
+
+            return await RunProcessAsync(psi, onLog, "jump host", ct);
+        }
+
+        public async Task<int> RunCommandThroughTunnelAsync(
+            CameraEndpoint camera,
+            int localSshPort,
+            string? credentialFile,
+            string command,
+            Action<string>? onLog,
+            CancellationToken ct)
+        {
+            var psi = BuildTunnelledCameraStartInfo(camera, localSshPort, command, credentialFile);
+            return await RunProcessAsync(psi, onLog, "camera SSH", ct);
+        }
+
+        public async Task<string?> GetCameraNameThroughTunnelAsync(
+            CameraEndpoint camera,
+            int localSshPort,
+            string? credentialFile,
+            CancellationToken ct)
+        {
+            var command = "boxid=$(printenv BOXID 2>/dev/null || true); if [ -n \"$boxid\" ]; then printf '%s' \"$boxid\"; else hostname; fi";
+            var psi = BuildTunnelledCameraStartInfo(camera, localSshPort, command, credentialFile);
+            psi.RedirectStandardOutput = true;
+            psi.RedirectStandardError = false;
+
+            using var process = new Process { StartInfo = psi };
+            process.Start();
+
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync(ct);
+            var output = await outputTask;
+
+            return process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output) ? output.Trim() : null;
+        }
+
+        public Process StartTunnel(CameraEndpoint camera, int remotePort, int localPort, int localSshPort, string jumpHost,
             string? credentialFile, Action<string>? onLog)
         {
             if (!IsAvailable || SshPath == null)
@@ -246,9 +307,13 @@ namespace CameraStream.Windows.Services
             psi.ArgumentList.Add("ServerAliveInterval=30");
             psi.ArgumentList.Add("-o");
             psi.ArgumentList.Add("ServerAliveCountMax=3");
+            psi.ArgumentList.Add("-o");
+            psi.ArgumentList.Add("ExitOnForwardFailure=yes");
             psi.ArgumentList.Add("-N");
             psi.ArgumentList.Add("-L");
             psi.ArgumentList.Add($"127.0.0.1:{localPort}:{camera.Host}:{remotePort}");
+            psi.ArgumentList.Add("-L");
+            psi.ArgumentList.Add($"127.0.0.1:{localSshPort}:{camera.Host}:22");
             psi.ArgumentList.Add(jumpHost);
 
             SetEnvironment(psi, jumpHost, credentialFile);
@@ -278,6 +343,69 @@ namespace CameraStream.Windows.Services
             process.BeginErrorReadLine();
 
             return process;
+        }
+
+        private ProcessStartInfo BuildTunnelledCameraStartInfo(
+            CameraEndpoint camera,
+            int localSshPort,
+            string command,
+            string? credentialFile)
+        {
+            if (SshPath == null)
+                throw new InvalidOperationException("SSH not found");
+
+            var psi = new ProcessStartInfo(SshPath)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true
+            };
+
+            AddCommonOptions(psi);
+            psi.ArgumentList.Add("-p");
+            psi.ArgumentList.Add(localSshPort.ToString());
+            psi.ArgumentList.Add("-o");
+            psi.ArgumentList.Add($"HostKeyAlias={camera.Host}");
+            psi.ArgumentList.Add($"{camera.Username}@127.0.0.1");
+            psi.ArgumentList.Add(command);
+
+            // The SSH password prompt names 127.0.0.1 because the camera is
+            // reached through a local forward. Keep the real camera account as
+            // the askpass fallback so the correct bundled credential is used.
+            SetEnvironment(psi, camera.CredentialAccount, credentialFile);
+            return psi;
+        }
+
+        private static async Task<int> RunProcessAsync(
+            ProcessStartInfo psi,
+            Action<string>? onLog,
+            string label,
+            CancellationToken ct)
+        {
+            using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+
+            if (onLog != null)
+            {
+                process.OutputDataReceived += (s, e) =>
+                {
+                    if (e.Data != null)
+                        onLog(e.Data);
+                };
+                process.ErrorDataReceived += (s, e) =>
+                {
+                    if (e.Data != null)
+                        onLog(e.Data);
+                };
+            }
+
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            await process.WaitForExitAsync(ct);
+            onLog?.Invoke($"{label} exited with status {process.ExitCode}");
+            return process.ExitCode;
         }
 
         public async Task<string?> GetCameraNameAsync(CameraEndpoint camera, string? jumpHost,

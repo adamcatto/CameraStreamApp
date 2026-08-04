@@ -27,7 +27,10 @@ var account = promptMatch.Success ? promptMatch.Value : fallback;
 if (string.IsNullOrEmpty(account))
     return 1;
 
-if (!TryGetPassword(credentials, account, out var password))
+if (!TryGetPassword(credentials, account, out var password)
+    && (string.IsNullOrEmpty(fallback)
+        || string.Equals(account, fallback, StringComparison.Ordinal)
+        || !TryGetPassword(credentials, fallback, out password)))
     return 1;
 
 Console.Out.WriteLine(password);

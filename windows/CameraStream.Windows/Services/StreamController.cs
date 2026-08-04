@@ -25,6 +25,7 @@ namespace CameraStream.Windows.Services
         private CameraWorkspace? _activeWorkspace;
         private string? _credentialFile;
         private readonly List<Process> _tunnels = new();
+        private readonly Dictionary<Guid, int> _cameraSshPorts = new();
 
         private bool _isStreaming;
         private string _status = "Ready";
@@ -56,7 +57,7 @@ namespace CameraStream.Windows.Services
             if (workspace.Cameras.Count == 0)
                 return;
 
-            Stop();
+            await StopAsync();
             _cts = new CancellationTokenSource();
             _activeWorkspace = workspace;
             var sessionCredentials = GetCredentials(workspace);
@@ -83,38 +84,65 @@ namespace CameraStream.Windows.Services
                 {
                     var usesJumpHost = !string.IsNullOrEmpty(workspace.JumpHost);
                     var launchSuccessCount = 0;
+                    var reachableCameras = new List<JumpCamera>();
+                    var streamingCameras = new List<JumpCamera>();
 
                     if (usesJumpHost)
                     {
-                        var tunnelCount = await OpenJumpHostTunnelsAsync(workspace, _cts.Token);
-                        if (tunnelCount == 0)
+                        await SetStatusAsync($"Connecting to jump host {workspace.JumpHost}...");
+                        LogService.Write($"[jump {workspace.JumpHost}] establishing authenticated SSH connection");
+                        var jumpExitCode = await _ssh.ProbeJumpHostAsync(
+                            workspace.JumpHost!,
+                            _credentialFile,
+                            msg => LogService.Write($"[jump {workspace.JumpHost}] {msg}"),
+                            _cts.Token);
+
+                        if (jumpExitCode != 0)
                         {
-                            await SetStatusAsync("Error: no jump-host tunnels could be opened");
+                            await SetFailedStatusAsync($"Error: could not authenticate to jump host {workspace.JumpHost}");
                             return;
                         }
 
-                        LogService.Write($"[tunnel] {tunnelCount}/{workspace.Cameras.Count} local listeners ready");
+                        LogService.Write($"[jump {workspace.JumpHost}] authenticated SSH connection established");
+                        reachableCameras = await OpenJumpHostTunnelsAsync(workspace, _cts.Token);
+                        if (reachableCameras.Count == 0)
+                        {
+                            await SetFailedStatusAsync("Error: jump host connected, but no cameras accepted SSH connections");
+                            return;
+                        }
+
+                        LogService.Write($"[camera ssh] {reachableCameras.Count}/{workspace.Cameras.Count} cameras connected through jump host");
                     }
 
-                    for (int i = 0; i < workspace.Cameras.Count; i++)
+                    var camerasToLaunch = usesJumpHost
+                        ? reachableCameras
+                        : workspace.Cameras.Select((camera, index) => new JumpCamera(camera, index, 0, 0)).ToList();
+
+                    for (int position = 0; position < camerasToLaunch.Count; position++)
                     {
                         if (_cts.IsCancellationRequested)
                             return;
 
+                        var item = camerasToLaunch[position];
                         if (usesJumpHost)
                         {
-                            await SetStatusAsync($"Starting camera {i + 1}/{workspace.Cameras.Count}...");
-                            var exitCode = await LaunchAndWaitAsync(workspace.Cameras[i], i, workspace.JumpHost, _cts.Token);
+                            await SetStatusAsync($"Starting reachable camera {position + 1}/{camerasToLaunch.Count}...");
+                            var exitCode = await LaunchAndWaitAsync(item.Camera, item.Index, item.LocalSshPort, _cts.Token);
                             if (exitCode == 0)
+                            {
                                 launchSuccessCount++;
+                                streamingCameras.Add(item);
+                            }
                             else
-                                LogService.Write($"[launch {workspace.Cameras[i].Address}] failed with exit code {exitCode}");
+                            {
+                                LogService.Write($"[launch {item.Camera.Address}] failed with exit code {exitCode}");
+                            }
 
                             await Task.Delay(800, _cts.Token);
                         }
                         else
                         {
-                            Launch(workspace.Cameras[i], i, null);
+                            Launch(item.Camera, item.Index, null);
                         }
                     }
 
@@ -126,22 +154,29 @@ namespace CameraStream.Windows.Services
                     if (usesJumpHost)
                     {
                         if (launchSuccessCount == 0)
+                        {
                             LogService.Write("[launch] no camera encoders reported a successful start");
+                            await SetFailedStatusAsync("Error: cameras connected by SSH, but no encoders started");
+                            return;
+                        }
 
                         await Task.Delay(1000, _cts.Token);
 
                         await _dispatcher.InvokeAsync(() =>
                         {
                             StreamPlayers.Clear();
-                            for (int i = 0; i < workspace.Cameras.Count; i++)
+                            foreach (var item in streamingCameras)
                             {
-                                var camera = workspace.Cameras[i];
-                                StreamPlayers.Add(new StreamPlayerViewModel(camera.Id, camera.Name, "127.0.0.1", 18000 + i));
+                                StreamPlayers.Add(new StreamPlayerViewModel(
+                                    item.Camera.Id,
+                                    item.Camera.Name,
+                                    "127.0.0.1",
+                                    item.LocalStreamPort));
                             }
                         });
 
                         await _dispatcher.InvokeAsync(() =>
-                            Status = $"Streaming {workspace.Cameras.Count} cameras ({launchSuccessCount} encoders started)");
+                            Status = $"Streaming {launchSuccessCount}/{workspace.Cameras.Count} cameras via {workspace.JumpHost}");
                     }
                     else
                     {
@@ -164,7 +199,11 @@ namespace CameraStream.Windows.Services
                         {
                             try
                             {
-                                await ResolveCameraNamesAsync(workspace.Cameras, workspace.JumpHost, usesJumpHost, _cts.Token);
+                                await ResolveCameraNamesAsync(
+                                    usesJumpHost ? streamingCameras.Select(item => item.Camera).ToList() : workspace.Cameras,
+                                    workspace.JumpHost,
+                                    usesJumpHost,
+                                    _cts.Token);
                             }
                             catch (OperationCanceledException)
                             {
@@ -177,42 +216,28 @@ namespace CameraStream.Windows.Services
                 }
                 catch (Exception ex)
                 {
-                    await SetStatusAsync($"Error: {ex.Message}");
+                    LogService.Write($"[stream] {ex}");
+                    await SetFailedStatusAsync($"Error: {ex.Message}");
                 }
             });
         }
 
         public async void Stop()
         {
+            await StopAsync();
+        }
+
+        private async Task StopAsync()
+        {
             _cts?.Cancel();
 
             var workspace = _activeWorkspace;
             var closingCredentialFile = _credentialFile;
+            var closingSshPorts = new Dictionary<Guid, int>(_cameraSshPorts);
+            var closingTunnels = _tunnels.ToList();
             _activeWorkspace = null;
             _credentialFile = null;
-
-            // Kill tunnels synchronously so app exit cleans up immediately.
-            foreach (var p in _tunnels.ToList())
-            {
-                try
-                {
-                    p.Kill();
-                }
-                catch
-                {
-                }
-                finally
-                {
-                    try
-                    {
-                        p.Dispose();
-                    }
-                    catch
-                    {
-                    }
-                }
-            }
-
+            _cameraSshPorts.Clear();
             _tunnels.Clear();
 
             await _dispatcher.InvokeAsync(() =>
@@ -224,19 +249,60 @@ namespace CameraStream.Windows.Services
 
             if (workspace != null)
             {
-                foreach (var camera in workspace.Cameras)
+                var stopTasks = workspace.Cameras.Select(async camera =>
                 {
                     try
                     {
-                        await _ssh.RunCommandAsync(camera, workspace.JumpHost, closingCredentialFile,
-                            "pkill -x libcamera-vid 2>/dev/null; pkill -x rpicam-vid 2>/dev/null; pkill -x raspivid 2>/dev/null; true",
-                            msg => LogService.Write($"[stop {camera.Address}] {msg}"),
-                            CancellationToken.None);
+                        const string stopCommand = "pkill -x libcamera-vid 2>/dev/null; pkill -x rpicam-vid 2>/dev/null; pkill -x raspivid 2>/dev/null; true";
+                        if (!string.IsNullOrEmpty(workspace.JumpHost))
+                        {
+                            if (closingSshPorts.TryGetValue(camera.Id, out var localSshPort))
+                            {
+                                await _ssh.RunCommandThroughTunnelAsync(
+                                    camera,
+                                    localSshPort,
+                                    closingCredentialFile,
+                                    stopCommand,
+                                    msg => LogService.Write($"[stop {camera.Address}] {msg}"),
+                                    CancellationToken.None);
+                            }
+                        }
+                        else
+                        {
+                            await _ssh.RunCommandAsync(
+                                camera,
+                                null,
+                                closingCredentialFile,
+                                stopCommand,
+                                msg => LogService.Write($"[stop {camera.Address}] {msg}"),
+                                CancellationToken.None);
+                        }
                     }
                     catch (Exception ex)
                     {
                         LogService.Write($"[stop {camera.Address}] {ex.Message}");
                     }
+                });
+
+                await Task.WhenAll(stopTasks);
+            }
+
+            foreach (var process in closingTunnels)
+            {
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill();
+                        process.WaitForExit(2000);
+                    }
+                }
+                catch
+                {
+                }
+                finally
+                {
+                    process.Dispose();
                 }
             }
 
@@ -258,17 +324,10 @@ namespace CameraStream.Windows.Services
                 msg => LogService.Write($"[launch {camera.Address}] {msg}"));
         }
 
-        private async Task<int> LaunchAndWaitAsync(CameraEndpoint camera, int index, string? jumpHost, CancellationToken ct)
+        private async Task<int> LaunchAndWaitAsync(CameraEndpoint camera, int index, int localSshPort, CancellationToken ct)
         {
             var command = BuildLaunchCommand(index);
-            var exitCode = await _ssh.RunCommandAsync(camera, jumpHost, _credentialFile, command,
-                msg => LogService.Write($"[launch {camera.Address}] {msg}"), ct);
-
-            if (exitCode == 0 || string.IsNullOrEmpty(jumpHost))
-                return exitCode;
-
-            LogService.Write($"[launch {camera.Address}] retrying via jump-shell SSH");
-            return await _ssh.RunCommandViaJumpShellAsync(camera, jumpHost, _credentialFile, command,
+            return await _ssh.RunCommandThroughTunnelAsync(camera, localSshPort, _credentialFile, command,
                 msg => LogService.Write($"[launch {camera.Address}] {msg}"), ct);
         }
 
@@ -286,10 +345,10 @@ namespace CameraStream.Windows.Services
                    $"else nohup \"$c\" --shutter 20000 --gain 32 --brightness 0.2 --width 1920 --height 1080 --codec h264 --framerate 30 --autofocus-mode auto --lens-position 3 --inline --listen -o tcp://0.0.0.0:{port} -t 0 >/tmp/camera-stream.log 2>&1 & fi; true";
         }
 
-        private async Task<int> OpenJumpHostTunnelsAsync(CameraWorkspace workspace, CancellationToken ct)
+        private async Task<List<JumpCamera>> OpenJumpHostTunnelsAsync(CameraWorkspace workspace, CancellationToken ct)
         {
             var jumpHost = workspace.JumpHost!;
-            var readyCount = 0;
+            var reachable = new List<JumpCamera>();
 
             for (int i = 0; i < workspace.Cameras.Count; i++)
             {
@@ -298,35 +357,65 @@ namespace CameraStream.Windows.Services
                 var camera = workspace.Cameras[i];
                 var remotePort = 8888 + i;
                 var localPort = 18000 + i;
+                var localSshPort = 19000 + i;
 
-                await SetStatusAsync($"Opening tunnel {i + 1}/{workspace.Cameras.Count}...");
+                await SetStatusAsync($"Checking camera SSH {i + 1}/{workspace.Cameras.Count} ({camera.Address})...");
 
-                var process = _ssh.StartTunnel(camera, remotePort, localPort, jumpHost, _credentialFile,
-                    msg => LogService.Write($"[tunnel {localPort}] {msg}"));
+                var process = _ssh.StartTunnel(camera, remotePort, localPort, localSshPort, jumpHost, _credentialFile,
+                    msg => LogService.Write($"[tunnel {camera.Address}] {msg}"));
 
                 _tunnels.Add(process);
 
-                if (await WaitForLocalListenerAsync(localPort, process, TimeSpan.FromSeconds(8), ct))
+                if (await WaitForLocalListenersAsync(new[] { localPort, localSshPort }, process, TimeSpan.FromSeconds(8), ct))
                 {
-                    readyCount++;
+                    var probeExitCode = await _ssh.RunCommandThroughTunnelAsync(
+                        camera,
+                        localSshPort,
+                        _credentialFile,
+                        "printf '__CAMERA_STREAM_CAMERA_READY__\\n'",
+                        msg => LogService.Write($"[camera ssh {camera.Address}] {msg}"),
+                        ct);
+
+                    if (probeExitCode == 0)
+                    {
+                        LogService.Write($"[camera ssh {camera.Address}] authenticated connection established via {jumpHost}");
+                        _cameraSshPorts[camera.Id] = localSshPort;
+                        reachable.Add(new JumpCamera(camera, i, localSshPort, localPort));
+                    }
+                    else
+                    {
+                        LogService.Write($"[camera ssh {camera.Address}] unavailable; continuing with remaining cameras");
+                        StopTunnel(process);
+                    }
                 }
                 else
                 {
-                    LogService.Write($"[tunnel {localPort}] failed to establish listener");
-                    try
-                    {
-                        if (!process.HasExited)
-                            process.Kill();
-                    }
-                    catch
-                    {
-                    }
+                    LogService.Write($"[tunnel {camera.Address}] failed to establish local forwards; continuing");
+                    StopTunnel(process);
                 }
 
                 await Task.Delay(400, ct);
             }
 
-            return readyCount;
+            return reachable;
+        }
+
+        private void StopTunnel(Process process)
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill();
+                    process.WaitForExit(2000);
+                }
+            }
+            catch
+            {
+            }
+
+            _tunnels.Remove(process);
+            process.Dispose();
         }
 
         private static bool IsLocalPortListening(int port)
@@ -337,8 +426,8 @@ namespace CameraStream.Windows.Services
                     (IPAddress.IsLoopback(endpoint.Address) || endpoint.Address.Equals(IPAddress.Any)));
         }
 
-        private static async Task<bool> WaitForLocalListenerAsync(
-            int port,
+        private static async Task<bool> WaitForLocalListenersAsync(
+            IReadOnlyCollection<int> ports,
             Process tunnel,
             TimeSpan timeout,
             CancellationToken ct)
@@ -355,7 +444,7 @@ namespace CameraStream.Windows.Services
                     return false;
                 }
 
-                if (IsLocalPortListening(port))
+                if (ports.All(IsLocalPortListening))
                     return true;
 
                 await Task.Delay(200, ct);
@@ -387,7 +476,11 @@ namespace CameraStream.Windows.Services
 
         private async Task ResolveCameraNameAsync(CameraEndpoint camera, string? jumpHost, CancellationToken ct)
         {
-            var name = await _ssh.GetCameraNameAsync(camera, jumpHost, _credentialFile, ct);
+            string? name;
+            if (!string.IsNullOrEmpty(jumpHost) && _cameraSshPorts.TryGetValue(camera.Id, out var localSshPort))
+                name = await _ssh.GetCameraNameThroughTunnelAsync(camera, localSshPort, _credentialFile, ct);
+            else
+                name = await _ssh.GetCameraNameAsync(camera, jumpHost, _credentialFile, ct);
             if (string.IsNullOrWhiteSpace(name))
                 return;
 
@@ -423,6 +516,22 @@ namespace CameraStream.Windows.Services
         {
             await _dispatcher.InvokeAsync(() => Status = status);
         }
+
+        private async Task SetFailedStatusAsync(string status)
+        {
+            await _dispatcher.InvokeAsync(() =>
+            {
+                Status = status;
+                IsStreaming = false;
+                StreamPlayers.Clear();
+            });
+        }
+
+        private readonly record struct JumpCamera(
+            CameraEndpoint Camera,
+            int Index,
+            int LocalSshPort,
+            int LocalStreamPort);
 
         private void SetProperty<T>(ref T field, T value, [CallerMemberName] string propertyName = "")
         {

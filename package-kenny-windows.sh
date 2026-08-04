@@ -8,6 +8,7 @@ root="$(cd "$(dirname "$0")" && pwd)"
 workspaces_source="${1:-}"
 credentials_source="${2:-}"
 branch="${CAMERA_STREAM_WINDOWS_BRANCH:-windows-port}"
+local_publish_dir="${CAMERA_STREAM_WINDOWS_PUBLISH_DIR:-}"
 bundle_file="$root/dist/kenny-credentials.bundle.json"
 output_zip="$root/dist/windows/kenny-CameraStream-Windows.zip"
 kenny_bat="$root/windows/kenny/Install Kenny Camera Stream.bat"
@@ -124,67 +125,81 @@ else
   exit 1
 fi
 
-if ! command -v gh >/dev/null 2>&1; then
-  cat >&2 <<'EOF'
+download_dir=""
+selected_run_id=""
+app_dir=""
+
+if [[ -n "$local_publish_dir" ]]; then
+  if [[ ! -f "$local_publish_dir/CameraStream.Windows.exe" || ! -f "$local_publish_dir/CameraSSHAskpass.exe" ]]; then
+    echo "Local Windows publish is incomplete: $local_publish_dir" >&2
+    exit 1
+  fi
+  app_dir="$(cd "$local_publish_dir" && pwd)"
+  base_description="local publish at $app_dir"
+else
+  if ! command -v gh >/dev/null 2>&1; then
+    cat >&2 <<'EOF'
 The GitHub CLI (gh) is required to download the credential-free Windows app.
 Install with: brew install gh
 Then run: gh auth login
 EOF
-  exit 1
-fi
-
-if ! gh auth status >/dev/null 2>&1; then
-  echo "Run 'gh auth login' before building the Kenny Windows zip." >&2
-  exit 1
-fi
-
-download_dir="$(mktemp -d "${TMPDIR:-/tmp}/kenny-windows-download.XXXXXX")"
-base_zip=""
-selected_run_id=""
-while IFS= read -r run_id; do
-  [[ -z "$run_id" ]] && continue
-  rm -rf "$download_dir"/*
-  echo "Trying credential-free CameraStream-Windows artifact from run $run_id ..."
-  if gh run download "$run_id" --name CameraStream-Windows --dir "$download_dir" 2>/dev/null \
-    && [[ -f "$download_dir/CameraStream-Windows.zip" ]]; then
-    base_zip="$download_dir/CameraStream-Windows.zip"
-    selected_run_id="$run_id"
-    echo "Downloaded base app from run $run_id"
-    break
+    exit 1
   fi
-done < <(gh run list --workflow="Windows build" --branch "$branch" -L 30 \
-  --json databaseId,conclusion \
-  --jq '.[] | select(.conclusion == "success") | .databaseId')
 
-if [[ -z "$base_zip" ]]; then
-  echo "No successful Windows build with a CameraStream-Windows artifact found on branch $branch." >&2
-  rm -rf "$download_dir"
-  exit 1
+  if ! gh auth status >/dev/null 2>&1; then
+    echo "Run 'gh auth login' before building the Kenny Windows zip." >&2
+    exit 1
+  fi
+
+  download_dir="$(mktemp -d "${TMPDIR:-/tmp}/kenny-windows-download.XXXXXX")"
+  base_zip=""
+  while IFS= read -r run_id; do
+    [[ -z "$run_id" ]] && continue
+    rm -rf "$download_dir"/*
+    echo "Trying credential-free CameraStream-Windows artifact from run $run_id ..."
+    if gh run download "$run_id" --name CameraStream-Windows --dir "$download_dir" 2>/dev/null \
+      && [[ -f "$download_dir/CameraStream-Windows.zip" ]]; then
+      base_zip="$download_dir/CameraStream-Windows.zip"
+      selected_run_id="$run_id"
+      echo "Downloaded base app from run $run_id"
+      break
+    fi
+  done < <(gh run list --workflow="Windows build" --branch "$branch" -L 30 \
+    --json databaseId,conclusion \
+    --jq '.[] | select(.conclusion == "success") | .databaseId')
+
+  if [[ -z "$base_zip" ]]; then
+    echo "No successful Windows build with a CameraStream-Windows artifact found on branch $branch." >&2
+    rm -rf "$download_dir"
+    exit 1
+  fi
+
+  staging="$(mktemp -d "${TMPDIR:-/tmp}/kenny-windows-staging.XXXXXX")"
+  unzip -q "$base_zip" -d "$staging"
+
+  app_dir="$staging"
+  if [[ ! -f "$app_dir/CameraStream.Windows.exe" ]]; then
+    shopt -s nullglob
+    subdirs=("$staging"/*/)
+    shopt -u nullglob
+    if [[ ${#subdirs[@]} -eq 1 && -f "${subdirs[0]}CameraStream.Windows.exe" ]]; then
+      app_dir="${subdirs[0]}"
+    else
+      echo "CameraStream.Windows.exe not found after extracting $base_zip" >&2
+      find "$staging" -maxdepth 2 -type f >&2 || true
+      exit 1
+    fi
+  fi
+  base_description="GitHub Actions run $selected_run_id"
 fi
 
-staging="$(mktemp -d "${TMPDIR:-/tmp}/kenny-windows-staging.XXXXXX")"
+staging="${staging:-}"
 cleanup() {
-  rm -rf "$staging"
+  [[ -n "$staging" ]] && rm -rf "$staging"
   [[ -n "$download_dir" ]] && rm -rf "$download_dir"
   rm -f "$bundle_file"
 }
 trap cleanup EXIT
-
-unzip -q "$base_zip" -d "$staging"
-
-app_dir="$staging"
-if [[ ! -f "$app_dir/CameraStream.Windows.exe" ]]; then
-  shopt -s nullglob
-  subdirs=("$staging"/*/)
-  shopt -u nullglob
-  if [[ ${#subdirs[@]} -eq 1 && -f "${subdirs[0]}CameraStream.Windows.exe" ]]; then
-    app_dir="${subdirs[0]}"
-  else
-    echo "CameraStream.Windows.exe not found after extracting $base_zip" >&2
-    find "$staging" -maxdepth 2 -type f >&2 || true
-    exit 1
-  fi
-fi
 
 cp "$workspaces_source" "$app_dir/kenny-workspaces.json"
 cp "$bundle_file" "$app_dir/kenny-credentials.json"
@@ -216,7 +231,7 @@ echo "$output_zip_abs"
 echo
 echo "Bundled workspaces from: $workspaces_source"
 echo "Bundled credentials from: $credentials_source"
-echo "Base Windows app downloaded from GitHub Actions run $selected_run_id (no secrets sent to GitHub)."
+echo "Base Windows app: $base_description (no secrets sent remotely)."
 echo
 echo "Credentials were bundled locally on this Mac only."
 echo "Send this zip privately to your Windows colleague."
