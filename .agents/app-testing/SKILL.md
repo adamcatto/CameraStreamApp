@@ -10,10 +10,10 @@ description: >-
 
 ## Automated smoke test (no network)
 
-Run after every `./package-dmg.sh`:
+Run after every `./apps/macos/scripts/package-dmg.sh`:
 
 ```sh
-./scripts/smoke-test.sh
+./apps/macos/scripts/smoke-test.sh
 ```
 
 Checks: bundle structure, executable bits, csshX shebang, DMG checksum, no obvious secrets in bundle.
@@ -66,12 +66,12 @@ Run the built app from `dist/Camera Stream.app` or `swift run`.
 - [ ] Workspace with 0 cameras → alert "Add at least one camera"
 - [ ] Host with invalid characters (e.g. `;rm`) → rejected with error alert
 
-## Integration tests (require network — sandbox/)
+## Integration tests (require network — config/sandbox/)
 
-These need VPN/lab access. Put real configs in `sandbox/workspaces.local.json` (gitignored), then:
+These need VPN/lab access. Put real configs in `config/sandbox/workspaces.local.json` (gitignored), then:
 
 ```sh
-./sandbox/import-workspaces.sh
+./config/sandbox/import-workspaces.sh
 ```
 
 ### IT-01 SSH streaming
@@ -102,7 +102,7 @@ Record: macOS version, build date, pass/fail per test ID, log excerpts (redact h
 
 ## Future automation (backburner)
 
-Candidate location: `sandbox/tests/`
+Candidate location: `config/sandbox/tests/`
 
 - XCUITest for sidebar/settings navigation (no SSH)
 - Scripted SSH mock for StreamController unit tests

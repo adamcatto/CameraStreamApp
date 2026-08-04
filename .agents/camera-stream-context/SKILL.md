@@ -10,7 +10,9 @@ description: >-
 
 ## What this is
 
-Native macOS SwiftUI app (`Sources/CameraStream/`) that:
+Cross-platform camera streaming monorepo. The native macOS SwiftUI app lives in
+`apps/macos/Sources/CameraStream/`, Windows in `apps/windows/`, and the browser
+client plus local gateway in `apps/web/`. The product:
 
 - Manages named **workspaces** (camera host lists + optional SSH jump host)
 - Starts H.264 encoders on Raspberry Pis via SSH
@@ -40,7 +42,7 @@ Persistence: `~/Library/Application Support/CameraStream/workspaces.json`
 - Never log passwords; `streaming.log` is SSH stderr only
 - SSH: `-F /dev/null`, `ControlMaster=no`, `StrictHostKeyChecking=accept-new`
 - Settings passwords use `SecureField`, not plain `TextField`
-- No lab IPs or credentials in committed source — use `sandbox/workspaces.local.json`
+- No lab IPs or credentials in committed source — use `config/sandbox/workspaces.local.json`
 - Cluster shell: validate host/username charset before shell invocation
 
 ## Build and package
@@ -48,8 +50,8 @@ Persistence: `~/Library/Application Support/CameraStream/workspaces.json`
 ```sh
 cd CameraStreamApp
 swift build -c release
-./package-dmg.sh          # → dist/Camera-Stream.dmg
-./scripts/smoke-test.sh
+./apps/macos/scripts/package-dmg.sh  # → dist/macos/Camera-Stream.dmg
+./apps/macos/scripts/smoke-test.sh
 ```
 
 Bundled in DMG: `CameraStream`, `CameraSSHAskpass`, `csshX`, icon.
@@ -57,6 +59,6 @@ Bundled in DMG: `CameraStream`, `CameraSSHAskpass`, `csshX`, icon.
 ## Conventions
 
 - Minimize scope; match existing SwiftUI patterns
-- macOS 14+ target (`Package.swift`)
+- macOS 14+ target (`apps/macos/Package.swift`)
 - Do not add Homebrew runtime dependencies to the app
-- Lab-specific config belongs in `sandbox/` (gitignored)
+- Lab-specific config belongs in `config/sandbox/` (gitignored)

@@ -1,0 +1,17 @@
+name: macOS build
+
+on:
+  push:
+    branches: [main, feature/web-monorepo]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build Swift client
+        run: swift build -c release --package-path apps/macos

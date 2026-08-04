@@ -2,7 +2,7 @@ name: Windows build
 
 on:
   push:
-    branches: [windows-port]
+    branches: [main, windows-port, feature/web-monorepo]
   pull_request:
     branches: [windows-port, main]
   workflow_dispatch:
@@ -11,20 +11,20 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 
       - name: Build, package, and smoke test
         shell: pwsh
         run: |
-          Set-Location windows
+          Set-Location apps/windows
           ./package-windows.ps1
 
       - name: Upload zip artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CameraStream-Windows
           path: dist/windows/CameraStream-Windows.zip

@@ -1,0 +1,13 @@
+{
+  "name": "camera-stream-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "web:dev": "npm run dev --workspace @camera-stream/web",
+    "web:build": "npm run build --workspace @camera-stream/web",
+    "web:start": "npm run start --workspace @camera-stream/web",
+    "web:test": "npm run test --workspace @camera-stream/web"
+  }
+}
