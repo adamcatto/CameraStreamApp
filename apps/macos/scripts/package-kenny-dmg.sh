@@ -1,29 +1,31 @@
 #!/usr/bin/env bash
 # Build a lab-specific DMG with IVSA / MotionCage / MouseMingle workspaces pre-bundled.
-# Workspaces are read from Application Support or sandbox/workspaces.local.json (never committed).
+# Workspaces are read from Application Support or config/sandbox/workspaces.local.json (never committed).
 set -euo pipefail
-root="$(cd "$(dirname "$0")" && pwd)"
-build="$root/.build/release"
-app="$root/dist/Camera Stream.app"
-vendor_csshx="$root/Vendor/csshX"
-staging="$root/dist/kenny-dmg-staging"
-dmg="$root/dist/kenny-Camera-Stream.dmg"
+app_root="$(cd "$(dirname "$0")/.." && pwd)"
+repo_root="$(cd "$app_root/../.." && pwd)"
+build="$app_root/.build/release"
+dist="$repo_root/dist/macos"
+app="$dist/Camera Stream.app"
+vendor_csshx="$app_root/Vendor/csshX"
+staging="$dist/kenny-dmg-staging"
+dmg="$dist/kenny-Camera-Stream.dmg"
 workspaces_source="${1:-}"
 credentials_source="${2:-}"
 
 if [[ -z "$workspaces_source" ]]; then
   if [[ -f "$HOME/Library/Application Support/CameraStream/workspaces.json" ]]; then
     workspaces_source="$HOME/Library/Application Support/CameraStream/workspaces.json"
-  elif [[ -f "$root/sandbox/workspaces.local.json" ]]; then
-    workspaces_source="$root/sandbox/workspaces.local.json"
+  elif [[ -f "$repo_root/config/sandbox/workspaces.local.json" ]]; then
+    workspaces_source="$repo_root/config/sandbox/workspaces.local.json"
   fi
 fi
 
 if [[ -z "$credentials_source" ]]; then
-  if [[ -f "$root/kenny/credentials.local.json" ]]; then
-    credentials_source="$root/kenny/credentials.local.json"
-  elif [[ -f "$root/sandbox/credentials.local.json" ]]; then
-    credentials_source="$root/sandbox/credentials.local.json"
+  if [[ -f "$repo_root/config/kenny/credentials.local.json" ]]; then
+    credentials_source="$repo_root/config/kenny/credentials.local.json"
+  elif [[ -f "$repo_root/config/sandbox/credentials.local.json" ]]; then
+    credentials_source="$repo_root/config/sandbox/credentials.local.json"
   fi
 fi
 
@@ -32,21 +34,21 @@ if [[ -z "$workspaces_source" || ! -f "$workspaces_source" ]]; then
 No workspace file found to bundle.
 
 Provide paths:
-  ./package-kenny-dmg.sh [workspaces.json] [credentials.json]
+  ./apps/macos/scripts/package-kenny-dmg.sh [workspaces.json] [credentials.json]
 
 Or ensure one of these exists:
   ~/Library/Application Support/CameraStream/workspaces.json
-  sandbox/workspaces.local.json
+  config/sandbox/workspaces.local.json
 EOF
   exit 1
 fi
 
 if [[ -z "$credentials_source" || ! -f "$credentials_source" ]]; then
-  echo "No credentials file found. Generating kenny/credentials.local.json template..." >&2
-  "$root/kenny/generate-credentials-template.sh" "$workspaces_source" "$root/kenny/credentials.local.json"
+  echo "No credentials file found. Generating config/kenny/credentials.local.json template..." >&2
+  "$repo_root/config/kenny/generate-credentials-template.sh" "$workspaces_source" "$repo_root/config/kenny/credentials.local.json"
   cat >&2 <<'EOF'
 
-Add passwords to kenny/credentials.local.json, then run ./package-kenny-dmg.sh again.
+Add passwords to config/kenny/credentials.local.json, then run this script again.
 EOF
   exit 1
 fi
@@ -61,9 +63,9 @@ if ! python3 -m json.tool "$credentials_source" >/dev/null 2>&1; then
   exit 1
 fi
 
-mkdir -p "$root/dist"
+mkdir -p "$dist"
 
-if python3 - "$workspaces_source" "$credentials_source" "$root/dist/kenny-credentials.bundle.json" <<'PY'
+if python3 - "$workspaces_source" "$credentials_source" "$dist/kenny-credentials.bundle.json" <<'PY'
 import json, sys
 workspaces = json.load(open(sys.argv[1]))
 raw = json.load(open(sys.argv[2]))
@@ -120,41 +122,41 @@ fi
 
 if [[ ! -x "$vendor_csshx" ]]; then
   if command -v brew >/dev/null 2>&1 && csshx_path="$(brew --prefix csshx 2>/dev/null)/bin/csshX" && [[ -f "$csshx_path" ]]; then
-    mkdir -p "$root/Vendor"
+    mkdir -p "$app_root/Vendor"
     cp "$csshx_path" "$vendor_csshx"
     sed -i.bak '1s|^#!/usr/bin/perl[0-9.]*$|#!/usr/bin/env perl|' "$vendor_csshx"
     rm -f "$vendor_csshx.bak"
     echo "Vendored csshX from Homebrew for bundling."
   else
-    echo "Missing $vendor_csshx. Install csshX with Homebrew or add the script to Vendor/ before packaging." >&2
+    echo "Missing $vendor_csshx. Install csshX with Homebrew or add the script to apps/macos/Vendor/ before packaging." >&2
     exit 1
   fi
 fi
 
-rm -rf "$app" "$staging" "$dmg" "$root/dist/Camera-Stream.dmg" "$root/dist/Camera-Stream-with-icon.dmg" "$root/dist-icon"
-swift build -c release --package-path "$root"
+rm -rf "$app" "$staging" "$dmg" "$dist/Camera-Stream.dmg" "$dist/Camera-Stream-with-icon.dmg" "$dist-icon"
+swift build -c release --package-path "$app_root"
 mkdir -p "$app/Contents/MacOS"
 mkdir -p "$app/Contents/Resources/bin"
 cp "$build/CameraStream" "$build/CameraSSHAskpass" "$app/Contents/MacOS/"
-cp "$root/Info.plist" "$app/Contents/Info.plist"
-cp "$root/Assets/CameraStream.icns" "$app/Contents/Resources/CameraStream.icns"
+cp "$app_root/Resources/Info.plist" "$app/Contents/Info.plist"
+cp "$app_root/Resources/Assets/CameraStream.icns" "$app/Contents/Resources/CameraStream.icns"
 cp "$workspaces_source" "$app/Contents/Resources/kenny-workspaces.json"
-cp "$root/dist/kenny-credentials.bundle.json" "$app/Contents/Resources/kenny-credentials.json"
+cp "$dist/kenny-credentials.bundle.json" "$app/Contents/Resources/kenny-credentials.json"
 chmod 600 "$app/Contents/Resources/kenny-credentials.json"
-rm -f "$root/dist/kenny-credentials.bundle.json"
+rm -f "$dist/kenny-credentials.bundle.json"
 cp "$vendor_csshx" "$app/Contents/Resources/bin/csshX"
 chmod +x "$app/Contents/Resources/bin/csshX"
-if [[ -f "$root/Vendor/csshX-LICENSE" ]]; then
-  cp "$root/Vendor/csshX-LICENSE" "$app/Contents/Resources/bin/csshX-LICENSE"
+if [[ -f "$app_root/Vendor/csshX-LICENSE" ]]; then
+  cp "$app_root/Vendor/csshX-LICENSE" "$app/Contents/Resources/bin/csshX-LICENSE"
 fi
 
 mkdir -p "$staging"
 cp -R "$app" "$staging/"
-cp "$root/kenny/Install Kenny Camera Stream.command" "$staging/"
+cp "$repo_root/config/kenny/Install Kenny Camera Stream.command" "$staging/"
 chmod +x "$staging/Install Kenny Camera Stream.command"
 ln -sf /Applications "$staging/Applications"
 
-mkdir -p "$root/dist"
+mkdir -p "$dist"
 hdiutil create -volname "Kenny Camera Stream" -srcfolder "$staging" -ov -format UDZO "$dmg"
 echo "Created $dmg"
 echo "Bundled workspaces from: $workspaces_source"

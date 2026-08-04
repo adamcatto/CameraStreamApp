@@ -32,13 +32,13 @@ description: >-
 ## Logging
 
 - [ ] `streaming.log` contains SSH stderr only
-- [ ] Grep repo: `grep -rRi 'password\s*=' Sources/` should find only UI labels/bindings, not literals
+- [ ] Grep platform sources for credential literals; UI labels/bindings are expected
 
 ## Repo hygiene
 
-- [ ] No internal lab IPs in `Sources/` (use `sandbox/workspaces.local.json`)
-- [ ] `.gitignore` covers `sandbox/*` (except examples), `dist/`, `.build/`, keys, `.env`
-- [ ] Run `./scripts/smoke-test.sh` secret scan on bundle
+- [ ] No internal lab IPs in `apps/*/Sources`, `apps/web/src`, or `apps/web/server` (use `config/sandbox/workspaces.local.json`)
+- [ ] `.gitignore` covers local files under `config/sandbox`, `dist/`, build outputs, keys, and `.env`
+- [ ] Run `./apps/macos/scripts/smoke-test.sh` secret scan on bundle
 
 ## DMG / bundle
 
@@ -50,11 +50,11 @@ description: >-
 
 ```sh
 # Secrets in source
-grep -rEn 'BEGIN (RSA|OPENSSH)|api[_-]?key|secret|token|password\s*=\s*"[^"]+"' Sources/ Vendor/ || true
+grep -rEn 'BEGIN (RSA|OPENSSH)|api[_-]?key|secret|token|password\s*=\s*"[^"]+"' apps/macos/Sources apps/macos/Vendor apps/windows apps/web/src apps/web/server || true
 
 # Internal IPs in source (should be none)
-grep -rE '10\.(81|1)\.' Sources/ || true
+grep -rE '10\.(81|1)\.' apps/macos/Sources apps/windows apps/web/src apps/web/server || true
 
 # Bundle scan
-./scripts/smoke-test.sh
+./apps/macos/scripts/smoke-test.sh
 ```

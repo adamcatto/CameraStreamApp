@@ -12,17 +12,17 @@ description: >-
 
 ```sh
 cd ~/Desktop/reproducible-streaming
-./package-kenny-windows.sh
+./apps/windows/scripts/package-kenny-on-macos.sh
 ```
 
 Or from the `windows-port` worktree:
 
 ```sh
 cd ~/.codex/worktrees/016c/CameraStreamApp
-./package-kenny-windows.sh
+./apps/windows/scripts/package-kenny-on-macos.sh
 ```
 
-Requires `gh auth login`. Reads workspaces from Application Support and credentials from `kenny/credentials.local.json`.
+Requires `gh auth login`. Reads workspaces from Application Support and credentials from `config/kenny/credentials.local.json`.
 
 ## Security
 

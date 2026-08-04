@@ -6,19 +6,19 @@ The Kenny build (`kenny-Camera-Stream.dmg`) includes lab workspaces **and passwo
 
 ```sh
 cd CameraStreamApp
-./package-kenny-dmg.sh
+./apps/macos/scripts/package-kenny-dmg.sh
 ```
 
 Output: `dist/kenny-Camera-Stream.dmg`
 
-Credentials are read from `kenny/credentials.local.json` (gitignored). Workspaces come from Application Support or `sandbox/workspaces.local.json`.
+Credentials are read from `config/kenny/credentials.local.json` (gitignored). Workspaces come from Application Support or `config/sandbox/workspaces.local.json`.
 
 ### Windows zip for colleagues (build from your Mac)
 
 ```sh
 cd CameraStreamApp
 git checkout windows-port   # or pull latest windows-port
-./package-kenny-windows.sh
+./apps/windows/scripts/package-kenny-on-macos.sh
 ```
 
 Output: `dist/windows/kenny-CameraStream-Windows.zip`

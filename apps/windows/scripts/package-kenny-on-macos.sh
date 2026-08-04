@@ -4,28 +4,30 @@
 # then bundles lab workspaces + credentials locally. Credentials never leave your Mac.
 set -euo pipefail
 
-root="$(cd "$(dirname "$0")" && pwd)"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+app_root="$(cd "$script_dir/.." && pwd)"
+repo_root="$(cd "$app_root/../.." && pwd)"
 workspaces_source="${1:-}"
 credentials_source="${2:-}"
-branch="${CAMERA_STREAM_WINDOWS_BRANCH:-windows-port}"
+branch="${CAMERA_STREAM_WINDOWS_BRANCH:-main}"
 local_publish_dir="${CAMERA_STREAM_WINDOWS_PUBLISH_DIR:-}"
-bundle_file="$root/dist/kenny-credentials.bundle.json"
-output_zip="$root/dist/windows/kenny-CameraStream-Windows.zip"
-kenny_bat="$root/windows/kenny/Install Kenny Camera Stream.bat"
+bundle_file="$repo_root/dist/kenny-credentials.bundle.json"
+output_zip="$repo_root/dist/windows/kenny-CameraStream-Windows.zip"
+kenny_bat="$app_root/kenny/Install Kenny Camera Stream.bat"
 
 if [[ -z "$workspaces_source" ]]; then
   if [[ -f "$HOME/Library/Application Support/CameraStream/workspaces.json" ]]; then
     workspaces_source="$HOME/Library/Application Support/CameraStream/workspaces.json"
-  elif [[ -f "$root/sandbox/workspaces.local.json" ]]; then
-    workspaces_source="$root/sandbox/workspaces.local.json"
+  elif [[ -f "$repo_root/config/sandbox/workspaces.local.json" ]]; then
+    workspaces_source="$repo_root/config/sandbox/workspaces.local.json"
   fi
 fi
 
 if [[ -z "$credentials_source" ]]; then
-  if [[ -f "$root/kenny/credentials.local.json" ]]; then
-    credentials_source="$root/kenny/credentials.local.json"
-  elif [[ -f "$root/sandbox/credentials.local.json" ]]; then
-    credentials_source="$root/sandbox/credentials.local.json"
+  if [[ -f "$repo_root/config/kenny/credentials.local.json" ]]; then
+    credentials_source="$repo_root/config/kenny/credentials.local.json"
+  elif [[ -f "$repo_root/config/sandbox/credentials.local.json" ]]; then
+    credentials_source="$repo_root/config/sandbox/credentials.local.json"
   fi
 fi
 
@@ -34,21 +36,21 @@ if [[ -z "$workspaces_source" || ! -f "$workspaces_source" ]]; then
 No workspace file found to bundle.
 
 Provide paths:
-  ./package-kenny-windows.sh [workspaces.json] [credentials.json]
+  ./apps/windows/scripts/package-kenny-on-macos.sh [workspaces.json] [credentials.json]
 
 Or ensure one of these exists:
   ~/Library/Application Support/CameraStream/workspaces.json
-  sandbox/workspaces.local.json
+  config/sandbox/workspaces.local.json
 EOF
   exit 1
 fi
 
 if [[ -z "$credentials_source" || ! -f "$credentials_source" ]]; then
-  echo "No credentials file found. Generating kenny/credentials.local.json template..." >&2
-  "$root/kenny/generate-credentials-template.sh" "$workspaces_source" "$root/kenny/credentials.local.json"
+  echo "No credentials file found. Generating config/kenny/credentials.local.json template..." >&2
+  "$repo_root/config/kenny/generate-credentials-template.sh" "$workspaces_source" "$repo_root/config/kenny/credentials.local.json"
   cat >&2 <<'EOF'
 
-Add passwords to kenny/credentials.local.json, then run ./package-kenny-windows.sh again.
+Add passwords to config/kenny/credentials.local.json, then run this script again.
 EOF
   exit 1
 fi
@@ -58,7 +60,7 @@ if [[ ! -f "$kenny_bat" ]]; then
   exit 1
 fi
 
-mkdir -p "$root/dist/windows"
+mkdir -p "$repo_root/dist/windows"
 
 if ! python3 -m json.tool "$workspaces_source" >/dev/null 2>&1; then
   echo "Workspace file is not valid JSON: $workspaces_source" >&2
@@ -209,7 +211,7 @@ app_payload="$bundle_root/CameraStream"
 mkdir -p "$app_payload"
 cp -R "$app_dir"/. "$app_payload/"
 cp "$kenny_bat" "$bundle_root/"
-cp "$root/windows/Run Camera Stream.bat" "$bundle_root/"
+cp "$app_root/Run Camera Stream.bat" "$bundle_root/"
 
 rm -f "$output_zip"
 (

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-root="$(cd "$(dirname "$0")/.." && pwd)"
-app="$root/dist/Camera Stream.app"
-dmg="$root/dist/Camera-Stream.dmg"
+repo_root="$(cd "$(dirname "$0")/../../.." && pwd)"
+app="$repo_root/dist/macos/Camera Stream.app"
+dmg="$repo_root/dist/macos/Camera-Stream.dmg"
 fail=0
 
 check() {

@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repoRoot = Resolve-Path (Join-Path $root "..")
+$repoRoot = Resolve-Path (Join-Path $root "..\..")
 $project = Join-Path $root "CameraStream.Windows\CameraStream.Windows.csproj"
 $bundler = Join-Path $root "scripts\bundle-kenny-credentials.ps1"
 $publishDir = Join-Path $root "publish"
@@ -14,7 +14,7 @@ $workspacesSource = $args[0]
 if (-not $workspacesSource) {
     $candidates = @(
         "$env:LOCALAPPDATA\CameraStream\workspaces.json",
-        (Join-Path $repoRoot "sandbox\workspaces.local.json")
+        (Join-Path $repoRoot "config\sandbox\workspaces.local.json")
     )
     foreach ($c in $candidates) {
         if (Test-Path $c) {
@@ -27,8 +27,8 @@ if (-not $workspacesSource) {
 $credentialsSource = $args[1]
 if (-not $credentialsSource) {
     $candidates = @(
-        (Join-Path $repoRoot "kenny\credentials.local.json"),
-        (Join-Path $repoRoot "sandbox\credentials.local.json")
+        (Join-Path $repoRoot "config\kenny\credentials.local.json"),
+        (Join-Path $repoRoot "config\sandbox\credentials.local.json")
     )
     foreach ($c in $candidates) {
         if (Test-Path $c) {
@@ -47,13 +47,13 @@ Provide paths:
 
 Or ensure one of these exists:
   %APPDATA%\CameraStream\workspaces.json
-  sandbox\workspaces.local.json
+  config\sandbox\workspaces.local.json
 "@
 }
 
 if (-not $credentialsSource -or -not (Test-Path $credentialsSource)) {
-    $template = Join-Path $repoRoot "kenny\credentials.local.json"
-    $generateScript = Join-Path $repoRoot "kenny\generate-credentials-template.sh"
+    $template = Join-Path $repoRoot "config\kenny\credentials.local.json"
+    $generateScript = Join-Path $repoRoot "config\kenny\generate-credentials-template.sh"
     if (Test-Path $generateScript) {
         & bash $generateScript $workspacesSource $template
     }

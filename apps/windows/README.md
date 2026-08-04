@@ -23,7 +23,7 @@ This is a native Windows port of the macOS SwiftUI Camera Stream app. It uses WP
 
 ## Build
 
-From a PowerShell prompt in `windows/`:
+From a PowerShell prompt in `apps/windows/`:
 
 ```powershell
 # Standard build
@@ -35,7 +35,7 @@ From a PowerShell prompt in `windows/`:
 
 The output zips are written to `dist/windows/`.
 
-CI on GitHub Actions runs `package-windows.ps1` (including the smoke test) on every push to `windows-port`. Download the built zip from the workflow run's **Artifacts** tab.
+CI on GitHub Actions runs `package-windows.ps1` (including the smoke test) on pushes to supported development branches and `main`. Download the built zip from the workflow run's **Artifacts** tab.
 
 ## Install
 
@@ -46,7 +46,7 @@ CI on GitHub Actions runs `package-windows.ps1` (including the smoke test) on ev
 ## Project layout
 
 ```
-windows/
+apps/windows/
   CameraStream.Windows/       WPF application
     Models/                    JSON workspace/camera models
     ViewModels/                MVVM view models

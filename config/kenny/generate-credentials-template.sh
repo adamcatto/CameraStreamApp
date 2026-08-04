@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Generate kenny/credentials.local.json with one entry per workspace.
+# Generate config/kenny/credentials.local.json with one entry per workspace.
 set -euo pipefail
-root="$(cd "$(dirname "$0")/.." && pwd)"
+repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 workspaces_source="${1:-}"
-output="${2:-$root/kenny/credentials.local.json}"
+output="${2:-$repo_root/config/kenny/credentials.local.json}"
 
 if [[ -z "$workspaces_source" ]]; then
   if [[ -f "$HOME/Library/Application Support/CameraStream/workspaces.json" ]]; then
     workspaces_source="$HOME/Library/Application Support/CameraStream/workspaces.json"
-  elif [[ -f "$root/sandbox/workspaces.local.json" ]]; then
-    workspaces_source="$root/sandbox/workspaces.local.json"
+  elif [[ -f "$repo_root/config/sandbox/workspaces.local.json" ]]; then
+    workspaces_source="$repo_root/config/sandbox/workspaces.local.json"
   fi
 fi
 
@@ -29,5 +29,5 @@ for workspace in workspaces:
     entries.append(entry)
 json.dump(entries, open(sys.argv[2], "w"), indent=2)
 print(f"Wrote {sys.argv[2]} with {len(entries)} workspace credential entries.")
-print("Add cameraPassword (and jumpPassword if needed) for each workspace, then run ./package-kenny-dmg.sh")
+print("Add cameraPassword (and jumpPassword if needed) for each workspace, then run the platform packaging script.")
 PY

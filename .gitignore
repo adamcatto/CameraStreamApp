@@ -1,23 +1,24 @@
 # Swift build artifacts
 .build/
+apps/macos/.build/
 *.xcodeproj
 *.xcworkspace
 DerivedData/
 
-# Distribution (rebuild with ./package-dmg.sh or ./package-kenny-dmg.sh)
+# Distribution (rebuilt by platform packaging scripts)
 dist/
 *.dmg
 kenny-*.dmg
 
 # Local sandbox: lab IPs, credentials, functional test configs
-sandbox/*
-!sandbox/README.md
-!sandbox/workspaces.example.json
-!sandbox/import-workspaces.sh
+config/sandbox/*
+!config/sandbox/README.md
+!config/sandbox/workspaces.example.json
+!config/sandbox/import-workspaces.sh
 
 # Kenny lab bundle inputs (never commit)
-kenny/credentials.local.json
-sandbox/credentials.local.json
+config/kenny/credentials.local.json
+config/sandbox/credentials.local.json
 
 # macOS
 .DS_Store
@@ -25,9 +26,12 @@ sandbox/credentials.local.json
 *~
 
 # Windows / .NET
-windows/**/bin/
-windows/**/obj/
-windows/**/publish/
+apps/windows/**/bin/
+apps/windows/**/obj/
+apps/windows/**/publish/
+apps/web/dist/
+apps/web/.server/
+node_modules/
 *.suo
 *.user
 *.userosscache

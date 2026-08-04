@@ -2,7 +2,7 @@
 name: build-and-package
 description: >-
   Build, package, and verify the Camera Stream DMG for macOS. Use when creating
-  a release build, updating package-dmg.sh, or troubleshooting bundling csshX.
+  a release build, updating the macOS packaging scripts, or troubleshooting bundled csshX.
 ---
 
 # Build and package
@@ -11,8 +11,8 @@ description: >-
 
 ```sh
 cd CameraStreamApp
-./package-dmg.sh
-./scripts/smoke-test.sh
+./apps/macos/scripts/package-dmg.sh
+./apps/macos/scripts/smoke-test.sh
 ```
 
 Output: `dist/Camera Stream.app`, `dist/Camera-Stream.dmg`
@@ -21,9 +21,9 @@ For Kenny Windows zip from Mac, see `.agents/package-kenny-windows/SKILL.md`.
 
 ## csshX vendoring
 
-`Vendor/csshX` must exist before packaging. If missing, `package-dmg.sh` copies from Homebrew (`brew install csshx`) and patches the Perl shebang to `#!/usr/bin/env perl`.
+`apps/macos/Vendor/csshX` must exist before packaging. If missing, the package script copies from Homebrew (`brew install csshx`) and patches the Perl shebang to `#!/usr/bin/env perl`.
 
-Commit `Vendor/csshX` and `Vendor/csshX-LICENSE` so CI/build machines don't need Homebrew.
+Commit `apps/macos/Vendor/csshX` and `apps/macos/Vendor/csshX-LICENSE` so CI/build machines don't need Homebrew.
 
 ## App bundle layout
 
@@ -39,7 +39,7 @@ Camera Stream.app/Contents/
 
 ## Distribution checklist
 
-- [ ] `./scripts/smoke-test.sh` passes
+- [ ] `./apps/macos/scripts/smoke-test.sh` passes
 - [ ] No secrets or internal IPs in committed source
 - [ ] For external sharing: code-sign and notarize (unsigned DMG triggers Gatekeeper)
 - [ ] Document right-click → Open for first launch

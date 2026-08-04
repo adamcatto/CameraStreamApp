@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repoRoot = Split-Path -Parent $root
+$repoRoot = Resolve-Path (Join-Path $root "..\..")
 $project = Join-Path $root "CameraStream.Windows\CameraStream.Windows.csproj"
 $publishDir = Join-Path $root "publish"
 $distDir = Join-Path $repoRoot "dist\windows"

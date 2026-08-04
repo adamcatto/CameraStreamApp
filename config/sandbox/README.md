@@ -15,7 +15,7 @@ Never commit `workspaces.local.json` — it may contain internal network address
 Future UI and integration tests that require real camera IPs or VPN access can live here:
 
 ```
-sandbox/
+config/sandbox/
   tests/                  Test plans and scripts (optional)
   workspaces.local.json   Your lab workspace definitions
   credentials.local.json  Never commit — session test data only

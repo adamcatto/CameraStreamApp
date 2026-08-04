@@ -1,103 +1,135 @@
 # Camera Stream
 
-Native macOS and Windows apps for managing Raspberry Pi camera workspaces, starting remote camera encoders over SSH, and viewing H.264 streams in-window.
+Camera Stream is a cross-platform monorepo for controlling Raspberry Pi camera
+workspaces over SSH and viewing their live H.264 feeds. It includes native
+macOS and Windows clients plus a browser client backed by a loopback-only local
+gateway.
 
-- **macOS:** SwiftUI, AVFoundation, and the bundled `csshX` cluster shell
-- **Windows:** WPF on .NET 8 with LibVLC playback and Windows Terminal cluster shells
-- **Jump hosts:** Both apps support cameras reached through an SSH jump host. The Windows app verifies the jump host first, checks each camera independently, and streams every camera it can reach.
+| Client | UI and playback | SSH transport |
+| --- | --- | --- |
+| macOS | SwiftUI + AVFoundation | OpenSSH, with bundled `csshX` for cluster shells |
+| Windows | WPF/.NET 8 + LibVLC | Windows OpenSSH and Windows Terminal |
+| Web | Vanilla TypeScript + browser video + xterm.js | Local Node gateway using SSH2 and bundled FFmpeg |
 
-## Requirements
+All three clients support direct camera connections and jump hosts. A jump-host
+session authenticates the jump host first, then attempts each camera
+independently. Unreachable cameras are reported and skipped while every
+reachable camera continues streaming.
 
-### macOS
+## Repository layout
 
-- macOS 14+
-- Built-in OpenSSH (`/usr/bin/ssh`) and Perl (`/usr/bin/perl`)
-
-No Homebrew or external runtime dependencies are required. The DMG bundles `csshX` and `CameraSSHAskpass`.
-
-### Windows
-
-- Windows 10 or Windows 11
-- Windows OpenSSH client (`ssh.exe`)
-
-The Windows ZIP is self-contained and does not require a separate .NET installation. LibVLC and the native SSH askpass helper are included.
-
-## Build and package
-
-### macOS
-
-```sh
-swift build              # debug
-swift build -c release   # release
-./package-dmg.sh         # dist/Camera-Stream.dmg
-./scripts/smoke-test.sh  # verify bundle after packaging
+```text
+apps/
+  macos/                    Swift package, resources, and DMG tooling
+  windows/                  WPF solution, installers, and ZIP tooling
+  web/                      Browser UI and loopback SSH/streaming gateway
+packages/
+  config-schema/            Canonical cross-platform workspace JSON schema
+config/
+  sandbox/                  Safe examples and gitignored local lab configs
+  kenny/                    Private-package templates and gitignored credentials
+.github/workflows/          Platform-specific continuous integration
+dist/                       Generated packages (gitignored)
 ```
 
+Platform implementations intentionally do not share runtime code: Swift,
+C#/.NET, and Node have different networking and media primitives. They do share
+the serialized workspace contract in `packages/config-schema` so workspaces can
+be imported and exported between clients.
+
+## Run the web client
+
+Requirements: Node.js 20.19 or newer. OpenSSH is not required for the web app;
+its gateway uses an SSH library directly. FFmpeg is installed as a local npm
+dependency.
+
+```sh
+npm install
+npm run web:dev
+```
+
+Open `http://127.0.0.1:4173`. The server binds only to loopback. Keep the
+terminal process running while using the app.
+
+For a production-mode local build:
+
+```sh
+npm run web:build
+npm run web:start
+```
+
+The web client is intentionally a local application rather than a static hosted
+site: browsers cannot open SSH connections or raw camera TCP streams directly.
+The local gateway establishes camera and jump-host connections, converts the
+Annex-B H.264 stream to fragmented MP4, and serves it to the browser on the same
+computer. Its cluster shell uses the already-authenticated per-camera SSH
+sessions.
+
+See [apps/web/README.md](apps/web/README.md) for runtime details.
+
+## Build native clients
+
+### macOS
+
+Requires macOS 14+, Swift 6, `/usr/bin/ssh`, and `/usr/bin/perl`.
+
+```sh
+swift build --package-path apps/macos
+swift build -c release --package-path apps/macos
+./apps/macos/scripts/package-dmg.sh
+./apps/macos/scripts/smoke-test.sh
+```
+
+The DMG is written to `dist/macos/Camera-Stream.dmg`. See
+[apps/macos/README.md](apps/macos/README.md).
+
 ### Windows
 
-From PowerShell on Windows:
+Requires Windows 10/11 and the Windows OpenSSH client. The packaged app is
+self-contained and does not require a separate .NET installation.
 
 ```powershell
-cd windows
+Set-Location apps/windows
 .\package-windows.ps1
 ```
 
-This creates `dist/windows/CameraStream-Windows.zip`. CI also builds the Windows ZIP on pushes to `windows-port`. See [windows/README.md](windows/README.md) for detailed build and packaging instructions.
+The ZIP is written to `dist/windows/CameraStream-Windows.zip`. See
+[apps/windows/README.md](apps/windows/README.md).
 
-## Install
+## Workspace configuration
 
-### macOS
+The common format includes a workspace name, optional `user@jump-host`, and a
+list of camera names, hosts, usernames, and base stream ports. The apps start
+camera encoders at the configured base port plus the camera's zero-based
+position, matching the original macOS behavior.
 
-1. Open `dist/Camera-Stream.dmg` and drag **Camera Stream** to Applications.
-2. Launch the app (right-click → Open if Gatekeeper blocks the unsigned build).
-3. Configure workspaces with your camera hosts, then **Start streaming** or **Open cluster shell**.
+For local macOS testing:
 
-### Windows
+```sh
+cp config/sandbox/workspaces.example.json config/sandbox/workspaces.local.json
+# Edit the local file with your camera hosts.
+./config/sandbox/import-workspaces.sh
+```
 
-1. Extract `CameraStream-Windows.zip`.
-2. Run `Install Camera Stream.bat`, or run the portable app with `Run Camera Stream.bat`.
-3. Configure a workspace and its camera, jump-host, and SSH credentials, then select **Start streaming**.
-
-The standard macOS and Windows packages do not contain camera hosts or credentials. Private Kenny lab packages can bundle workspace definitions and passwords for internal distribution and must be shared securely.
+The web app can import this JSON directly. Windows can use the same file through
+its workspace store or private packaging flow.
 
 ## Security
 
-- Session passwords live in memory only and are cleared on quit.
-- Temporary credential files are restricted to the current user and deleted after streaming stops.
-- Passwords are not written to workspace JSON, Keychain, or logs.
-- SSH uses `-F /dev/null` and disables ControlMaster to avoid stale credential reuse.
-- The committed repository contains no lab IP addresses or credentials. Use the gitignored local configuration files for lab-specific values.
+- Standard packages and committed examples contain no lab IPs or credentials.
+- Passwords are kept only for the current application/browser session.
+- Native clients use permission-restricted temporary credential files and
+  remove them after sessions stop.
+- The web client does not persist passwords; its gateway binds to
+  `127.0.0.1`, rejects cross-origin API and terminal requests, and never writes
+  passwords to logs.
+- Private Kenny packages can embed hosts and passwords. Share those artifacts
+  only through an approved private channel.
 
-For distribution outside your organization, sign and notarize the app before sharing.
+Native logs are stored at:
 
-## Project layout
+- macOS: `~/Library/Application Support/CameraStream/streaming.log`
+- Windows: `%LOCALAPPDATA%\CameraStream\streaming.log`
 
-```
-Sources/CameraStream/     SwiftUI app and streaming logic
-Sources/CameraSSHAskpass/ SSH_ASKPASS helper
-Vendor/csshX              Bundled cluster shell (vendored at build time)
-Assets/                   App icon
-windows/                  Native WPF/.NET 8 Windows application and packaging
-scripts/                  Build verification
-sandbox/                  Local-only test configs (gitignored)
-.agents/                  Agent skills and project context
-```
-
-## Local lab configuration
-
-Copy the example and add your workspace definitions:
-
-```sh
-cp sandbox/workspaces.example.json sandbox/workspaces.local.json
-# edit sandbox/workspaces.local.json with your camera hosts
-./sandbox/import-workspaces.sh
-```
-
-This imports into `~/Library/Application Support/CameraStream/workspaces.json` for macOS app testing. On Windows, workspaces are stored under `%LOCALAPPDATA%\CameraStream\`.
-
-## Logs
-
-- **macOS:** `~/Library/Application Support/CameraStream/streaming.log`
-- **Windows:** `%LOCALAPPDATA%\CameraStream\streaming.log`
-
-Logs include SSH connection and camera availability diagnostics but never passwords.
+The web connection log is held in gateway memory and is visible from the status
+bar while a session is active.
