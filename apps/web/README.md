@@ -43,3 +43,48 @@ Workspace definitions use browser local storage and can be imported/exported as
 the shared JSON format. Passwords remain in JavaScript and gateway memory only
 for the active session; they are not placed in local storage, output files, or
 logs. Closing a session stops the remote encoders and SSH connections.
+
+## Credential imports
+
+The Settings screen and password prompt accept `.json`, `.yaml`, `.yml`,
+`.csv`, `.tsv`, and `.xlsx` credential files. Parsing happens in the browser;
+the source file is not uploaded or copied. Imported passwords populate the
+session-only credential fields for accounts already present in a workspace.
+
+Supported layouts include a direct account mapping:
+
+```json
+{
+  "pi@192.0.2.10": "camera-password",
+  "jump@192.0.2.50": "jump-password"
+}
+```
+
+A workspace mapping can apply shared camera and jump-host passwords:
+
+```yaml
+- workspaceName: Example cluster
+  cameraPassword: camera-password
+  jumpPassword: jump-password
+```
+
+CSV, TSV, and XLSX files use a header row. They can identify a specific account:
+
+```csv
+account,password
+pi@192.0.2.10,camera-password
+```
+
+Or assign shared values by workspace:
+
+```csv
+workspaceName,cameraPassword,jumpPassword
+Example cluster,camera-password,jump-password
+```
+
+The importer also accepts `host` + `username` + `password`, and optional
+`cameraName` for a camera within a named workspace. All XLSX worksheets are
+read. Unknown accounts, workspaces, or cameras are reported but never created
+implicitly, preventing a typo from silently attaching a password to the wrong
+host. Credential files are limited to 10 MB. In spreadsheets, format passwords
+as text when leading zeroes must be preserved.

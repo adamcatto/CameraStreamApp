@@ -121,6 +121,8 @@ input:focus { border-color: #62a1d0; background: #fff; }
 
 .settings-page { max-width: 900px; margin: 0 auto; padding: 24px; }
 .settings-page > section { margin-bottom: 16px; padding: 19px; border: 1px solid var(--border); border-radius: 11px; background: #fff; }
+.settings-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.settings-heading button { flex: 0 0 auto; }
 .settings-page > section > p { margin: 5px 0 15px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .credential-list { margin-bottom: 13px; border: 1px solid #d8dde1; border-radius: 8px; }
 .credential-list > label { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(220px, 1fr); align-items: center; gap: 15px; padding: 9px 11px; border-bottom: 1px solid #e5e8ea; }
@@ -134,6 +136,13 @@ input:focus { border-color: #62a1d0; background: #fff; }
 .settings-empty { padding: 20px; color: var(--muted); text-align: center; font-size: 12px; }
 .settings-actions { display: flex; gap: 8px; }
 .runtime-ok { color: #318357; font-size: 11px; font-weight: 600; }
+.file-import-button { width: 100%; margin: -2px 0 5px; border-style: dashed; background: #f6f9fb; }
+.import-summary { display: flex; flex-direction: column; gap: 2px; margin: 0 0 13px; padding: 10px 12px; border: 1px solid #bddbc9; border-radius: 8px; background: #f1f9f4; }
+.import-summary strong { color: #27734a; font-size: 11px; }
+.import-summary span, .import-summary small { color: #5d7567; font-size: 10px; line-height: 1.4; }
+.import-summary.warning { border-color: #e4cf9f; background: #fff9eb; }
+.import-summary.warning strong { color: #8a661d; }
+.import-summary.warning span, .import-summary.warning small { color: #806d46; }
 
 .center-message { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100%; padding: 40px; color: var(--muted); text-align: center; }
 .center-message h2 { margin: 13px 0 3px; color: #35414b; font-size: 17px; }
@@ -208,4 +217,7 @@ input:focus { border-color: #62a1d0; background: #fff; }
   .empty-table strong, .center-message h2, .credential-list strong { color: #dce2e6; }
   .connection-note { color: #a8c6d9; border-color: #3d5666; background: #1e2d37; }
   .unavailable { border-color: #64483e; background: #2f2521; }
+  .file-import-button { background: #222a30; }
+  .import-summary { border-color: #3c624d; background: #1d3025; }
+  .import-summary.warning { border-color: #665738; background: #302a1e; }
 }

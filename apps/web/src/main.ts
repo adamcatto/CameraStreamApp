@@ -1,5 +1,6 @@
 import "./styles.css";
 import { createSession, getSession, stopSession, streamUrl } from "./api";
+import { importCredentialFile, type CredentialImportResult } from "./credential-import";
 import { exampleWorkspace, normalizeWorkspaces, type CameraWorkspace, type SessionStatus } from "./models";
 import { disposeTerminals, mountTerminals } from "./terminal";
 
@@ -17,6 +18,7 @@ let status = "Ready";
 let busy = false;
 let credentialIntent: PendingIntent | null = null;
 let terminalOpen = false;
+let credentialImportSummary: (Omit<CredentialImportResult, "credentials"> & { filename: string }) | null = null;
 const revealedAccounts = new Set<string>();
 
 render();
@@ -91,8 +93,11 @@ app.addEventListener("click", async (event) => {
     } else if (action === "clear-credentials") {
       credentials = {};
       revealedAccounts.clear();
+      credentialImportSummary = null;
       status = "Session credentials cleared";
       render();
+    } else if (action === "import-credentials") {
+      document.querySelector<HTMLInputElement>("#credential-import")?.click();
     } else if (action === "toggle-password") {
       const account = button.dataset.account ?? "";
       if (revealedAccounts.has(account)) revealedAccounts.delete(account);
@@ -135,7 +140,26 @@ app.addEventListener("input", (event) => {
 
 app.addEventListener("change", async (event) => {
   const input = event.target as HTMLInputElement;
-  if (input.id !== "workspace-import" || !input.files?.[0]) return;
+  if (!input.files?.[0]) return;
+  if (input.id === "credential-import") {
+    const file = input.files[0];
+    try {
+      const result = await importCredentialFile(file, workspaces);
+      const { credentials: importedCredentials, ...summary } = result;
+      credentials = { ...credentials, ...importedCredentials };
+      credentialImportSummary = { ...summary, filename: file.name };
+      status = result.importedAccounts.length
+        ? `Imported ${result.importedAccounts.length} session credentials from ${file.name}`
+        : `No matching credentials found in ${file.name}`;
+    } catch (error) {
+      credentialImportSummary = null;
+      status = `Credential import failed: ${error instanceof Error ? error.message : "invalid file"}`;
+    }
+    input.value = "";
+    render();
+    return;
+  }
+  if (input.id !== "workspace-import") return;
   try {
     workspaces = normalizeWorkspaces(JSON.parse(await input.files[0].text()));
     if (workspaces.length === 0) throw new Error("Workspace file is empty.");
@@ -195,6 +219,7 @@ function render(): void {
       </main>
     </div>
     <input id="workspace-import" type="file" accept="application/json,.json" hidden />
+    <input id="credential-import" type="file" accept=".json,.yaml,.yml,.csv,.tsv,.xlsx,application/json,text/csv,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden />
     ${credentialIntent && workspace ? renderCredentialModal(workspace) : ""}
     ${terminalOpen && session ? renderTerminalModal(session) : ""}
   `;
@@ -264,7 +289,8 @@ function renderSettings(): string {
   const accounts = uniqueAccounts();
   return `
     <div class="settings-page">
-      <section><h2>Session credentials</h2><p>Passwords remain in browser memory and are discarded when this tab closes. They are sent only to the local gateway when opening a session.</p>
+      <section><div class="settings-heading"><h2>Session credentials</h2><button data-action="import-credentials">Import credentials…</button></div><p>Passwords remain in browser memory and are discarded when this tab closes. Import JSON, YAML, CSV, TSV, or XLSX files; values are matched to workspace names or SSH accounts.</p>
+        ${renderCredentialImportSummary()}
         <div class="credential-list">
           ${accounts.length ? accounts.map(({ label, account }) => `
             <label><span><strong>${html(label)}</strong><small>${html(account)}</small></span><span class="password-control"><input data-field="credential" data-account="${attribute(account)}" type="${revealedAccounts.has(account) ? "text" : "password"}" value="${attribute(credentials[account] ?? "")}" placeholder="Password" autocomplete="off" /><button data-action="toggle-password" data-account="${attribute(account)}" aria-label="Show or hide password">${revealedAccounts.has(account) ? "Hide" : "Show"}</button></span></label>`).join("") : `<div class="settings-empty">Add a workspace camera to manage its credentials.</div>`}
@@ -289,11 +315,23 @@ function renderCredentialModal(workspace: CameraWorkspace): string {
       <section class="modal credentials-modal" role="dialog" aria-modal="true" aria-labelledby="credentials-title">
         <div class="modal-icon">⌁</div><h2 id="credentials-title">Credentials for ${html(workspace.name)}</h2>
         <p>Passwords are used only for this local session and discarded when the tab closes.</p>
+        <button class="file-import-button" data-action="import-credentials">Import JSON, YAML, CSV, TSV, or XLSX…</button>
+        ${renderCredentialImportSummary()}
         <label>Shared camera password<input id="camera-password" type="password" placeholder="${hasCameraPasswords ? "Already set — leave blank to keep" : "Required"}" autocomplete="off" /></label>
         ${workspace.jumpHost ? `<label>Jump host password <span>${html(workspace.jumpHost)}</span><input id="jump-password" type="password" placeholder="${hasJumpPassword ? "Already set — leave blank to keep" : "Required"}" autocomplete="off" /></label>` : ""}
         <div class="modal-actions"><button data-action="cancel-credentials">Cancel</button><button class="primary" data-action="submit-credentials">${credentialIntent === "shell" ? "Open shell" : "Start"}</button></div>
       </section>
     </div>`;
+}
+
+function renderCredentialImportSummary(): string {
+  if (!credentialImportSummary) return "";
+  const unmatched = credentialImportSummary.unmatchedEntries;
+  return `<div class="import-summary ${credentialImportSummary.importedAccounts.length ? "success" : "warning"}">
+    <strong>${credentialImportSummary.importedAccounts.length} credentials matched</strong>
+    <span>${html(credentialImportSummary.filename)} · ${credentialImportSummary.processedRows} rows processed${unmatched.length ? ` · ${unmatched.length} unmatched` : ""}</span>
+    ${unmatched.length ? `<small>${unmatched.slice(0, 3).map(html).join(" · ")}${unmatched.length > 3 ? ` · +${unmatched.length - 3} more` : ""}</small>` : ""}
+  </div>`;
 }
 
 function renderTerminalModal(activeSession: SessionStatus): string {

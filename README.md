@@ -114,6 +114,11 @@ cp config/sandbox/workspaces.example.json config/sandbox/workspaces.local.json
 The web app can import this JSON directly. Windows can use the same file through
 its workspace store or private packaging flow.
 
+The web client's in-memory credential importer accepts JSON, YAML, CSV, TSV,
+and XLSX. It matches account or workspace columns against existing workspaces
+without persisting passwords. See [apps/web/README.md](apps/web/README.md#credential-imports)
+for accepted layouts.
+
 ## Security
 
 - Standard packages and committed examples contain no lab IPs or credentials.
