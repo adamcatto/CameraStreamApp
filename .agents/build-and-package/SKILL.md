@@ -17,7 +17,7 @@ cd CameraStreamApp
 
 Output: `dist/Camera Stream.app`, `dist/Camera-Stream.dmg`
 
-For Kenny Windows zip from Mac, see `.agents/package-kenny-windows/SKILL.md`.
+For a Profiles Windows zip from Mac, see `.agents/package-profiles-windows/SKILL.md`.
 
 ## csshX vendoring
 

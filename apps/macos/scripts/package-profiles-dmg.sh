@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a lab-specific DMG with IVSA / MotionCage / MouseMingle workspaces pre-bundled.
+# Build a personal-profile DMG with selected workspaces pre-bundled.
 # Workspaces are read from Application Support or config/sandbox/workspaces.local.json (never committed).
 set -euo pipefail
 app_root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -8,8 +8,8 @@ build="$app_root/.build/release"
 dist="$repo_root/dist/macos"
 app="$dist/Camera Stream.app"
 vendor_csshx="$app_root/Vendor/csshX"
-staging="$dist/kenny-dmg-staging"
-dmg="$dist/kenny-Camera-Stream.dmg"
+staging="$dist/profiles-dmg-staging"
+dmg="$dist/profiles-Camera-Stream.dmg"
 workspaces_source="${1:-}"
 credentials_source="${2:-}"
 
@@ -22,8 +22,8 @@ if [[ -z "$workspaces_source" ]]; then
 fi
 
 if [[ -z "$credentials_source" ]]; then
-  if [[ -f "$repo_root/config/kenny/credentials.local.json" ]]; then
-    credentials_source="$repo_root/config/kenny/credentials.local.json"
+  if [[ -f "$repo_root/config/profiles/credentials.local.json" ]]; then
+    credentials_source="$repo_root/config/profiles/credentials.local.json"
   elif [[ -f "$repo_root/config/sandbox/credentials.local.json" ]]; then
     credentials_source="$repo_root/config/sandbox/credentials.local.json"
   fi
@@ -34,7 +34,7 @@ if [[ -z "$workspaces_source" || ! -f "$workspaces_source" ]]; then
 No workspace file found to bundle.
 
 Provide paths:
-  ./apps/macos/scripts/package-kenny-dmg.sh [workspaces.json] [credentials.json]
+  ./apps/macos/scripts/package-profiles-dmg.sh [workspaces.json] [credentials.json]
 
 Or ensure one of these exists:
   ~/Library/Application Support/CameraStream/workspaces.json
@@ -44,11 +44,11 @@ EOF
 fi
 
 if [[ -z "$credentials_source" || ! -f "$credentials_source" ]]; then
-  echo "No credentials file found. Generating config/kenny/credentials.local.json template..." >&2
-  "$repo_root/config/kenny/generate-credentials-template.sh" "$workspaces_source" "$repo_root/config/kenny/credentials.local.json"
+  echo "No credentials file found. Generating config/profiles/credentials.local.json template..." >&2
+  "$repo_root/config/profiles/generate-credentials-template.sh" "$workspaces_source" "$repo_root/config/profiles/credentials.local.json"
   cat >&2 <<'EOF'
 
-Add passwords to config/kenny/credentials.local.json, then run this script again.
+Add passwords to config/profiles/credentials.local.json, then run this script again.
 EOF
   exit 1
 fi
@@ -65,7 +65,7 @@ fi
 
 mkdir -p "$dist"
 
-if python3 - "$workspaces_source" "$credentials_source" "$dist/kenny-credentials.bundle.json" <<'PY'
+if python3 - "$workspaces_source" "$credentials_source" "$dist/profiles-credentials.bundle.json" <<'PY'
 import json, sys
 workspaces = json.load(open(sys.argv[1]))
 raw = json.load(open(sys.argv[2]))
@@ -140,10 +140,10 @@ mkdir -p "$app/Contents/Resources/bin"
 cp "$build/CameraStream" "$build/CameraSSHAskpass" "$app/Contents/MacOS/"
 cp "$app_root/Resources/Info.plist" "$app/Contents/Info.plist"
 cp "$app_root/Resources/Assets/CameraStream.icns" "$app/Contents/Resources/CameraStream.icns"
-cp "$workspaces_source" "$app/Contents/Resources/kenny-workspaces.json"
-cp "$dist/kenny-credentials.bundle.json" "$app/Contents/Resources/kenny-credentials.json"
-chmod 600 "$app/Contents/Resources/kenny-credentials.json"
-rm -f "$dist/kenny-credentials.bundle.json"
+cp "$workspaces_source" "$app/Contents/Resources/profiles-workspaces.json"
+cp "$dist/profiles-credentials.bundle.json" "$app/Contents/Resources/profiles-credentials.json"
+chmod 600 "$app/Contents/Resources/profiles-credentials.json"
+rm -f "$dist/profiles-credentials.bundle.json"
 cp "$vendor_csshx" "$app/Contents/Resources/bin/csshX"
 chmod +x "$app/Contents/Resources/bin/csshX"
 if [[ -f "$app_root/Vendor/csshX-LICENSE" ]]; then
@@ -152,14 +152,14 @@ fi
 
 mkdir -p "$staging"
 cp -R "$app" "$staging/"
-cp "$repo_root/config/kenny/Install Kenny Camera Stream.command" "$staging/"
-chmod +x "$staging/Install Kenny Camera Stream.command"
+cp "$repo_root/config/profiles/Install Profiles Camera Stream.command" "$staging/"
+chmod +x "$staging/Install Profiles Camera Stream.command"
 ln -sf /Applications "$staging/Applications"
 
 mkdir -p "$dist"
-hdiutil create -volname "Kenny Camera Stream" -srcfolder "$staging" -ov -format UDZO "$dmg"
+hdiutil create -volname "Profiles Camera Stream" -srcfolder "$staging" -ov -format UDZO "$dmg"
 echo "Created $dmg"
 echo "Bundled workspaces from: $workspaces_source"
 echo "Bundled credentials from: $credentials_source"
-echo "Share this DMG privately — it contains lab IPs and passwords."
-echo "Colleagues double-click \"Install Kenny Camera Stream.command\"."
+echo "Share this DMG privately — it contains workspace hosts and passwords."
+echo "Users double-click \"Install Profiles Camera Stream.command\"."

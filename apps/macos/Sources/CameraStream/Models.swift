@@ -38,7 +38,7 @@ final class WorkspaceStore: ObservableObject {
         if let data = try? Data(contentsOf: fileURL),
            let saved = try? JSONDecoder().decode([CameraWorkspace].self, from: data), !saved.isEmpty {
             workspaces = saved
-        } else if let bundled = Self.bundledKennyWorkspaces() {
+        } else if let bundled = Self.bundledProfilesWorkspaces() {
             workspaces = bundled
             save()
         } else {
@@ -47,8 +47,8 @@ final class WorkspaceStore: ObservableObject {
         selectedID = workspaces.first?.id
     }
 
-    private static func bundledKennyWorkspaces() -> [CameraWorkspace]? {
-        guard let url = Bundle.main.url(forResource: "kenny-workspaces", withExtension: "json"),
+    private static func bundledProfilesWorkspaces() -> [CameraWorkspace]? {
+        guard let url = Bundle.main.url(forResource: "profiles-workspaces", withExtension: "json"),
               let data = try? Data(contentsOf: url),
               let workspaces = try? JSONDecoder().decode([CameraWorkspace].self, from: data),
               !workspaces.isEmpty else { return nil }
@@ -64,13 +64,13 @@ final class CredentialStore: ObservableObject {
     static let shared = CredentialStore()
     @Published var passwords: [String: String] = [:]
     private init() {
-        if let bundled = Self.bundledKennyCredentials() {
+        if let bundled = Self.bundledProfilesCredentials() {
             passwords = bundled
         }
     }
 
-    private static func bundledKennyCredentials() -> [String: String]? {
-        guard let url = Bundle.main.url(forResource: "kenny-credentials", withExtension: "json"),
+    private static func bundledProfilesCredentials() -> [String: String]? {
+        guard let url = Bundle.main.url(forResource: "profiles-credentials", withExtension: "json"),
               let data = try? Data(contentsOf: url),
               let credentials = try? JSONDecoder().decode([String: String].self, from: data),
               !credentials.isEmpty else { return nil }

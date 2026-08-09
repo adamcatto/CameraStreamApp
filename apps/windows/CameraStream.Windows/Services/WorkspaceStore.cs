@@ -68,7 +68,7 @@ namespace CameraStream.Windows.Services
 
         private List<CameraWorkspace>? LoadBundled()
         {
-            var path = BundledTools.GetBundledPath("kenny-workspaces.json");
+            var path = BundledTools.GetBundledPath("profiles-workspaces.json");
             if (path == null || !File.Exists(path))
                 return null;
 

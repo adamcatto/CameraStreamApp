@@ -24,7 +24,7 @@ test("imports an account-to-password JSON mapping", () => {
   });
 });
 
-test("imports Kenny workspace credentials from YAML", async () => {
+test("imports profile workspace credentials from YAML", async () => {
   const result = await importCredentialText(`
 - workspaceName: Example cluster
   cameraPassword: camera-secret

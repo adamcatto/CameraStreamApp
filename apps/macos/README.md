@@ -10,6 +10,6 @@ swift build --package-path apps/macos
 ./apps/macos/scripts/smoke-test.sh
 ```
 
-Generated app bundles and DMGs are written under `dist/macos/`. The Kenny DMG
-builder is `apps/macos/scripts/package-kenny-dmg.sh`; it reads private inputs
-from `config/kenny` and `config/sandbox` unless explicit paths are supplied.
+Generated app bundles and DMGs are written under `dist/macos/`. The Profiles DMG
+builder is `apps/macos/scripts/package-profiles-dmg.sh`; it reads private inputs
+from `config/profiles` and `config/sandbox` unless explicit paths are supplied.

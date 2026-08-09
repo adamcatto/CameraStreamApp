@@ -27,7 +27,7 @@ packages/
   config-schema/            Canonical cross-platform workspace JSON schema
 config/
   sandbox/                  Safe examples and gitignored local lab configs
-  kenny/                    Private-package templates and gitignored credentials
+  profiles/                 Private profile templates and gitignored credentials
 .github/workflows/          Platform-specific continuous integration
 dist/                       Generated packages (gitignored)
 ```
@@ -128,7 +128,7 @@ for accepted layouts.
 - The web client does not persist passwords; its gateway binds to
   `127.0.0.1`, rejects cross-origin API and terminal requests, and never writes
   passwords to logs.
-- Private Kenny packages can embed hosts and passwords. Share those artifacts
+- Private profile packages can embed hosts and passwords. Share those artifacts
   only through an approved private channel.
 
 Native logs are stored at:

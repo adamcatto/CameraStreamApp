@@ -25,7 +25,7 @@ namespace CameraStream.Windows.Services
 
         private CredentialStore()
         {
-            var path = BundledTools.GetBundledPath("kenny-credentials.json");
+            var path = BundledTools.GetBundledPath("profiles-credentials.json");
             if (path == null || !File.Exists(path))
                 return;
 

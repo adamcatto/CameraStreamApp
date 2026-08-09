@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Generate config/kenny/credentials.local.json with one entry per workspace.
+# Generate config/profiles/credentials.local.json with one entry per workspace.
 set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 workspaces_source="${1:-}"
-output="${2:-$repo_root/config/kenny/credentials.local.json}"
+output="${2:-$repo_root/config/profiles/credentials.local.json}"
 
 if [[ -z "$workspaces_source" ]]; then
   if [[ -f "$HOME/Library/Application Support/CameraStream/workspaces.json" ]]; then

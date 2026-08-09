@@ -8,7 +8,7 @@ DerivedData/
 # Distribution (rebuilt by platform packaging scripts)
 dist/
 *.dmg
-kenny-*.dmg
+profiles-*.dmg
 
 # Local sandbox: lab IPs, credentials, functional test configs
 config/sandbox/*
@@ -16,8 +16,8 @@ config/sandbox/*
 !config/sandbox/workspaces.example.json
 !config/sandbox/import-workspaces.sh
 
-# Kenny lab bundle inputs (never commit)
-config/kenny/credentials.local.json
+# Personal profile bundle inputs (never commit)
+config/profiles/credentials.local.json
 config/sandbox/credentials.local.json
 
 # macOS

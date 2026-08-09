@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Build a Kenny Windows zip entirely on your Mac.
+# Build a profile Windows zip entirely on your Mac.
 # Downloads the credential-free Windows app from GitHub Actions,
-# then bundles lab workspaces + credentials locally. Credentials never leave your Mac.
+# then bundles profile workspaces and credentials locally. Credentials never leave your Mac.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
@@ -11,9 +11,9 @@ workspaces_source="${1:-}"
 credentials_source="${2:-}"
 branch="${CAMERA_STREAM_WINDOWS_BRANCH:-main}"
 local_publish_dir="${CAMERA_STREAM_WINDOWS_PUBLISH_DIR:-}"
-bundle_file="$repo_root/dist/kenny-credentials.bundle.json"
-output_zip="$repo_root/dist/windows/kenny-CameraStream-Windows.zip"
-kenny_bat="$app_root/kenny/Install Kenny Camera Stream.bat"
+bundle_file="$repo_root/dist/profiles-credentials.bundle.json"
+output_zip="$repo_root/dist/windows/profiles-CameraStream-Windows.zip"
+profiles_bat="$app_root/profiles/Install Profiles Camera Stream.bat"
 
 if [[ -z "$workspaces_source" ]]; then
   if [[ -f "$HOME/Library/Application Support/CameraStream/workspaces.json" ]]; then
@@ -24,8 +24,8 @@ if [[ -z "$workspaces_source" ]]; then
 fi
 
 if [[ -z "$credentials_source" ]]; then
-  if [[ -f "$repo_root/config/kenny/credentials.local.json" ]]; then
-    credentials_source="$repo_root/config/kenny/credentials.local.json"
+  if [[ -f "$repo_root/config/profiles/credentials.local.json" ]]; then
+    credentials_source="$repo_root/config/profiles/credentials.local.json"
   elif [[ -f "$repo_root/config/sandbox/credentials.local.json" ]]; then
     credentials_source="$repo_root/config/sandbox/credentials.local.json"
   fi
@@ -36,7 +36,7 @@ if [[ -z "$workspaces_source" || ! -f "$workspaces_source" ]]; then
 No workspace file found to bundle.
 
 Provide paths:
-  ./apps/windows/scripts/package-kenny-on-macos.sh [workspaces.json] [credentials.json]
+  ./apps/windows/scripts/package-profiles-on-macos.sh [workspaces.json] [credentials.json]
 
 Or ensure one of these exists:
   ~/Library/Application Support/CameraStream/workspaces.json
@@ -46,17 +46,17 @@ EOF
 fi
 
 if [[ -z "$credentials_source" || ! -f "$credentials_source" ]]; then
-  echo "No credentials file found. Generating config/kenny/credentials.local.json template..." >&2
-  "$repo_root/config/kenny/generate-credentials-template.sh" "$workspaces_source" "$repo_root/config/kenny/credentials.local.json"
+  echo "No credentials file found. Generating config/profiles/credentials.local.json template..." >&2
+  "$repo_root/config/profiles/generate-credentials-template.sh" "$workspaces_source" "$repo_root/config/profiles/credentials.local.json"
   cat >&2 <<'EOF'
 
-Add passwords to config/kenny/credentials.local.json, then run this script again.
+Add passwords to config/profiles/credentials.local.json, then run this script again.
 EOF
   exit 1
 fi
 
-if [[ ! -f "$kenny_bat" ]]; then
-  echo "Missing Kenny installer: $kenny_bat" >&2
+if [[ ! -f "$profiles_bat" ]]; then
+  echo "Missing Profiles installer: $profiles_bat" >&2
   exit 1
 fi
 
@@ -149,11 +149,11 @@ EOF
   fi
 
   if ! gh auth status >/dev/null 2>&1; then
-    echo "Run 'gh auth login' before building the Kenny Windows zip." >&2
+    echo "Run 'gh auth login' before building the Profiles Windows zip." >&2
     exit 1
   fi
 
-  download_dir="$(mktemp -d "${TMPDIR:-/tmp}/kenny-windows-download.XXXXXX")"
+  download_dir="$(mktemp -d "${TMPDIR:-/tmp}/profiles-windows-download.XXXXXX")"
   base_zip=""
   while IFS= read -r run_id; do
     [[ -z "$run_id" ]] && continue
@@ -176,7 +176,7 @@ EOF
     exit 1
   fi
 
-  staging="$(mktemp -d "${TMPDIR:-/tmp}/kenny-windows-staging.XXXXXX")"
+  staging="$(mktemp -d "${TMPDIR:-/tmp}/profiles-windows-staging.XXXXXX")"
   unzip -q "$base_zip" -d "$staging"
 
   app_dir="$staging"
@@ -203,14 +203,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-cp "$workspaces_source" "$app_dir/kenny-workspaces.json"
-cp "$bundle_file" "$app_dir/kenny-credentials.json"
+cp "$workspaces_source" "$app_dir/profiles-workspaces.json"
+cp "$bundle_file" "$app_dir/profiles-credentials.json"
 
-bundle_root="$(mktemp -d "${TMPDIR:-/tmp}/kenny-windows-bundle.XXXXXX")"
+bundle_root="$(mktemp -d "${TMPDIR:-/tmp}/profiles-windows-bundle.XXXXXX")"
 app_payload="$bundle_root/CameraStream"
 mkdir -p "$app_payload"
 cp -R "$app_dir"/. "$app_payload/"
-cp "$kenny_bat" "$bundle_root/"
+cp "$profiles_bat" "$bundle_root/"
 cp "$app_root/Run Camera Stream.bat" "$bundle_root/"
 
 rm -f "$output_zip"
@@ -228,7 +228,7 @@ fi
 output_zip_abs="$(cd "$(dirname "$output_zip")" && pwd)/$(basename "$output_zip")"
 
 echo
-echo "Kenny Windows zip:"
+echo "Profiles Windows zip:"
 echo "$output_zip_abs"
 echo
 echo "Bundled workspaces from: $workspaces_source"
@@ -237,6 +237,6 @@ echo "Base Windows app: $base_description (no secrets sent remotely)."
 echo
 echo "Credentials were bundled locally on this Mac only."
 echo "Send this zip privately to your Windows colleague."
-echo "They should extract it and double-click: Install Kenny Camera Stream.bat"
+echo "They should extract it and double-click: Install Profiles Camera Stream.bat"
 echo "Or use Run Camera Stream.bat to launch without installing."
-echo "Zip layout: Install Kenny Camera Stream.bat, Run Camera Stream.bat, CameraStream\\"
+echo "Zip layout: Install Profiles Camera Stream.bat, Run Camera Stream.bat, CameraStream\\"

@@ -13,13 +13,13 @@ This is a native Windows port of the macOS SwiftUI Camera Stream app. It uses WP
 - Session credential management
 - Cluster shell via Windows Terminal (`wt.exe`) with a separate-window fallback
 - Self-contained publish and zip packaging
-- Kenny lab bundle packaging
+- Profile bundle packaging
 
 ## Prerequisites (build machine)
 
 - Windows 10/11 or a machine with the .NET 8 SDK
 - `ssh.exe` (included with Windows 10 1809+ and Windows 11)
-- PowerShell 7+ for the Kenny bundler
+- PowerShell 7+ for the profile bundler
 
 ## Build
 
@@ -29,8 +29,8 @@ From a PowerShell prompt in `apps/windows/`:
 # Standard build
 .\package-windows.ps1
 
-# Kenny bundle build
-.\package-kenny-windows.ps1
+# Profile bundle build
+.\package-profiles-windows.ps1
 ```
 
 The output zips are written to `dist/windows/`.
@@ -40,7 +40,7 @@ CI on GitHub Actions runs `package-windows.ps1` (including the smoke test) on pu
 ## Install
 
 1. Extract the zip.
-2. Run `Install Camera Stream.bat` (or `Install Kenny Camera Stream.bat`).
+2. Run `Install Camera Stream.bat` (or `Install Profiles Camera Stream.bat`).
 3. The batch file copies the app to `%LOCALAPPDATA%\CameraStream` and launches it.
 
 ## Project layout
@@ -53,10 +53,10 @@ apps/windows/
     Views/                     XAML views and controls
     Services/                  SSH, streaming, workspace/credential stores
     Assets/                    Icon and SSH askpass scripts
-  kenny/                       Kenny installer and sharing notes
-  scripts/                     Kenny credential bundler
+  profiles/                    Profile installer and sharing notes
+  scripts/                     Profile credential bundler
   package-windows.ps1
-  package-kenny-windows.ps1
+  package-profiles-windows.ps1
 ```
 
 ## Notes
