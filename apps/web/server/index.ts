@@ -6,6 +6,7 @@ import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import ffmpegPath from "ffmpeg-static";
 import { WebSocketServer, type WebSocket } from "ws";
+import { sanitizeCaptureSettings } from "./capture-settings.js";
 import { validateSessionRequest } from "./models.js";
 import { SessionManager } from "./session-manager.js";
 
@@ -127,6 +128,18 @@ async function handleApi(request: IncomingMessage, response: ServerResponse): Pr
   const streamMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/cameras\/([^/]+)\/stream\.mp4$/);
   if (streamMatch && request.method === "GET") {
     await streamCamera(response, decodeURIComponent(streamMatch[1]!), decodeURIComponent(streamMatch[2]!));
+    return;
+  }
+
+  const settingsMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/cameras\/([^/]+)\/settings$/);
+  if (settingsMatch && request.method === "PUT") {
+    const body = await readJsonBody(request);
+    const settings = await manager.applySettings(
+      decodeURIComponent(settingsMatch[1]!),
+      decodeURIComponent(settingsMatch[2]!),
+      sanitizeCaptureSettings(body),
+    );
+    sendJson(response, 200, { settings });
     return;
   }
   sendJson(response, 404, { error: "Not found." });

@@ -11,6 +11,21 @@
       "type": "string",
       "format": "uuid"
     },
+    "captureSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional per-camera encoder capture settings. Omitted fields fall back to the client defaults, which reproduce the original hardcoded pipeline.",
+      "properties": {
+        "shutterMicroseconds": { "type": "integer", "minimum": 0, "maximum": 200000, "default": 20000, "description": "Exposure time in microseconds. 0 selects automatic exposure." },
+        "gain": { "type": "number", "minimum": 1, "maximum": 64, "default": 32, "description": "Analogue sensor gain." },
+        "brightness": { "type": "number", "minimum": -1, "maximum": 1, "default": 0.2 },
+        "contrast": { "type": "number", "minimum": 0, "maximum": 2, "default": 1 },
+        "saturation": { "type": "number", "minimum": 0, "maximum": 2, "default": 1 },
+        "sharpness": { "type": "number", "minimum": 0, "maximum": 2, "default": 1 },
+        "ev": { "type": "number", "minimum": -10, "maximum": 10, "default": 0, "description": "Exposure-value compensation." },
+        "framerate": { "type": "integer", "minimum": 1, "maximum": 120, "default": 30 }
+      }
+    },
     "camera": {
       "type": "object",
       "additionalProperties": false,
@@ -20,7 +35,8 @@
         "name": { "type": "string", "minLength": 1 },
         "host": { "type": "string", "minLength": 1 },
         "username": { "type": "string", "minLength": 1, "default": "pi" },
-        "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 8888 }
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 8888 },
+        "settings": { "$ref": "#/$defs/captureSettings" }
       }
     },
     "workspace": {

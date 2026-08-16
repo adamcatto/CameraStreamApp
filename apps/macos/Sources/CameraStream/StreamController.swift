@@ -9,6 +9,7 @@ final class StreamController: ObservableObject {
     private var tunnels: [Process] = []
     private var activeWorkspace: CameraWorkspace?
     private var credentialFile: URL?
+    private var cameraSettings: [UUID: CaptureSettings] = [:]
     private let logURL: URL = {
         let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("CameraStream", isDirectory: true)
@@ -21,6 +22,7 @@ final class StreamController: ObservableObject {
         guard !cameras.isEmpty else { return }
         stop()
         activeWorkspace = workspace
+        cameraSettings = Dictionary(uniqueKeysWithValues: cameras.map { ($0.id, ($0.settings ?? .default).clamped()) })
         credentialFile = SessionCredentials.create(cameras: cameras, jumpHost: workspace.jumpHost, passwords: CredentialStore.shared.passwords)
         isStreaming = true
         status = "Starting \(cameras.count) camera streams…"
@@ -49,6 +51,7 @@ final class StreamController: ObservableObject {
         let closingCredentialFile = credentialFile
         activeWorkspace = nil
         credentialFile = nil
+        cameraSettings.removeAll()
         isStreaming = false
         guard !cameras.isEmpty else { status = "Ready"; return }
         status = "Stopping camera encoders…"
@@ -62,14 +65,42 @@ final class StreamController: ObservableObject {
         status = "Stopped"
     }
 
+    /// Current capture settings for a camera, falling back to defaults.
+    func settings(for cameraID: UUID) -> CaptureSettings { cameraSettings[cameraID] ?? .default }
+
+    /// Relaunch a single camera's encoder with new capture settings and force
+    /// its player to reconnect. The Pi camera stack has no live control channel,
+    /// so this kills and restarts only that camera's encoder.
+    func applySettings(cameraID: UUID, settings newSettings: CaptureSettings) {
+        guard isStreaming,
+              let workspace = activeWorkspace,
+              let index = workspace.cameras.firstIndex(where: { $0.id == cameraID }) else { return }
+        let camera = workspace.cameras[index]
+        let sanitized = newSettings.clamped()
+        cameraSettings[cameraID] = sanitized
+        status = "Applying capture settings to \(camera.name)…"
+        runSSH(camera, jumpHost: workspace.jumpHost, credentialFile: credentialFile, command: launchCommand(port: 8888 + index, settings: sanitized))
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            guard isStreaming else { return }
+            if let endpointIndex = streamEndpoints.firstIndex(where: { $0.id == cameraID }) {
+                streamEndpoints[endpointIndex].revision += 1
+            }
+            status = "Applied capture settings to \(camera.name)"
+        }
+    }
+
     private func launch(_ camera: CameraEndpoint, index: Int, jumpHost: String?) async {
-        let port = 8888 + index
-        let command = """
+        let settings = cameraSettings[camera.id] ?? .default
+        runSSH(camera, jumpHost: jumpHost, credentialFile: credentialFile, command: launchCommand(port: 8888 + index, settings: settings))
+    }
+
+    private func launchCommand(port: Int, settings: CaptureSettings) -> String {
+        """
         pkill -x libcamera-vid 2>/dev/null || true; pkill -x rpicam-vid 2>/dev/null || true; pkill -x raspivid 2>/dev/null || true;
         if command -v rpicam-vid >/dev/null 2>&1; then c=$(command -v rpicam-vid); elif command -v libcamera-vid >/dev/null 2>&1; then c=$(command -v libcamera-vid); elif command -v raspivid >/dev/null 2>&1; then c=$(command -v raspivid); else exit 127; fi;
-        if [ "${c##*/}" = raspivid ]; then nohup "$c" -md 4 -ss 20000 -ISO 32 -w 1640 -h 1232 -fps 30 -ih -n -l -o tcp://0.0.0.0:\(port) -t 0 >/tmp/camera-stream.log 2>&1 & else nohup "$c" --shutter 20000 --gain 32 --brightness 0.2 --width 1920 --height 1080 --codec h264 --framerate 30 --autofocus-mode auto --lens-position 3 --inline --listen -o tcp://0.0.0.0:\(port) -t 0 >/tmp/camera-stream.log 2>&1 & fi
+        if [ "${c##*/}" = raspivid ]; then nohup "$c" \(settings.raspividArguments) -o tcp://0.0.0.0:\(port) -t 0 >/tmp/camera-stream.log 2>&1 & else nohup "$c" \(settings.libcameraArguments) -o tcp://0.0.0.0:\(port) -t 0 >/tmp/camera-stream.log 2>&1 & fi
         """
-        runSSH(camera, jumpHost: jumpHost, credentialFile: credentialFile, command: command)
     }
 
     private func runSSH(_ camera: CameraEndpoint, jumpHost: String?, credentialFile: URL? = nil, command: String) {
