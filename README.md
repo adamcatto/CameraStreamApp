@@ -16,6 +16,13 @@ session authenticates the jump host first, then attempts each camera
 independently. Unreachable cameras are reported and skipped while every
 reachable camera continues streaming.
 
+While streaming, every client exposes a per-camera capture panel (shutter, gain,
+brightness, contrast, saturation, sharpness, EV, and frame rate). Because the Pi
+camera stack takes these only as launch arguments, applying a change relaunches
+that one camera's encoder and reconnects its tile; the other feeds keep playing.
+Defaults reproduce the original hardcoded pipeline, and the optional per-camera
+`settings` object is documented in `packages/config-schema`.
+
 ## Repository layout
 
 ```text

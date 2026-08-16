@@ -1,9 +1,12 @@
+import { type CaptureSettings, sanitizeCaptureSettings } from "./capture-settings.js";
+
 export interface CameraEndpoint {
   id: string;
   name: string;
   host: string;
   username: string;
   port: number;
+  settings?: CaptureSettings;
 }
 
 export interface CameraWorkspace {
@@ -108,6 +111,7 @@ export function validateSessionRequest(value: unknown): SessionRequest {
         host: camera.host.trim(),
         username: camera.username.trim(),
         port: Number.isInteger(camera.port) && camera.port > 0 && camera.port <= 65535 ? camera.port : 8888,
+        settings: camera.settings ? sanitizeCaptureSettings(camera.settings) : undefined,
       })),
       jumpHost: workspace.jumpHost?.trim() || null,
     },

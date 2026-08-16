@@ -295,7 +295,105 @@ private struct SettingsCredentialRow: View {
 
 private struct StreamGrid: View {
     let endpoints: [StreamEndpoint]
-    var body: some View { ScrollView { LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 10)], spacing: 10) { ForEach(endpoints) { endpoint in VStack(spacing: 4) { H264StreamView(endpoint: endpoint).aspectRatio(16 / 9, contentMode: .fit).clipShape(.rect(cornerRadius: 6)); Text("\(endpoint.name) · \(endpoint.host)").font(.caption).lineLimit(1) } } }.padding() } }
+    var body: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 10)], spacing: 10) {
+                ForEach(endpoints) { endpoint in StreamTile(endpoint: endpoint) }
+            }
+            .padding()
+        }
+    }
+}
+
+private struct StreamTile: View {
+    let endpoint: StreamEndpoint
+    @EnvironmentObject private var streamer: StreamController
+    @State private var showSettings = false
+    @State private var draft = CaptureSettings.default
+
+    var body: some View {
+        VStack(spacing: 4) {
+            ZStack(alignment: .topTrailing) {
+                H264StreamView(endpoint: endpoint)
+                    .id(endpoint.revision)
+                    .aspectRatio(16 / 9, contentMode: .fit)
+                    .clipShape(.rect(cornerRadius: 6))
+                Button {
+                    draft = streamer.settings(for: endpoint.id)
+                    showSettings = true
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .padding(6)
+                        .background(.black.opacity(0.45), in: Circle())
+                        .foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
+                .padding(6)
+                .help("Adjust capture settings")
+                .popover(isPresented: $showSettings, arrowEdge: .bottom) {
+                    CaptureSettingsForm(name: endpoint.name, settings: $draft) {
+                        streamer.applySettings(cameraID: endpoint.id, settings: draft)
+                        showSettings = false
+                    } onReset: {
+                        draft = .default
+                    }
+                }
+            }
+            Text("\(endpoint.name) · \(endpoint.host)").font(.caption).lineLimit(1)
+        }
+    }
+}
+
+private struct CaptureSettingsForm: View {
+    let name: String
+    @Binding var settings: CaptureSettings
+    let onApply: () -> Void
+    let onReset: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Capture settings · \(name)").font(.headline)
+            sliderRow("Shutter (µs)",
+                      value: Binding(get: { Double(settings.shutterMicroseconds) }, set: { settings.shutterMicroseconds = Int($0) }),
+                      range: 0...200_000, step: 500,
+                      display: settings.shutterMicroseconds == 0 ? "auto" : "\(settings.shutterMicroseconds)")
+            sliderRow("Gain", value: $settings.gain, range: 1...64, step: 0.5)
+            sliderRow("Brightness", value: $settings.brightness, range: -1...1, step: 0.05)
+            sliderRow("Contrast", value: $settings.contrast, range: 0...2, step: 0.05)
+            sliderRow("Saturation", value: $settings.saturation, range: 0...2, step: 0.05)
+            sliderRow("Sharpness", value: $settings.sharpness, range: 0...2, step: 0.05)
+            sliderRow("EV", value: $settings.ev, range: -10...10, step: 0.5)
+            sliderRow("Frame rate",
+                      value: Binding(get: { Double(settings.framerate) }, set: { settings.framerate = Int($0) }),
+                      range: 1...120, step: 1,
+                      display: "\(settings.framerate)")
+            HStack {
+                Button("Reset", action: onReset)
+                Spacer()
+                Button("Apply", action: onApply).keyboardShortcut(.defaultAction)
+            }
+            Text("Applying relaunches this camera's encoder, so its video reconnects briefly.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .frame(width: 320)
+    }
+
+    @ViewBuilder
+    private func sliderRow(_ label: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double, display: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(label).font(.caption)
+                Spacer()
+                Text(display ?? String(format: "%.2f", value.wrappedValue))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            Slider(value: value, in: range, step: step)
+        }
+    }
 }
 
 private struct WorkspaceEditor: View {

@@ -8,6 +8,9 @@ struct StreamEndpoint: Identifiable, Hashable {
     var name: String
     let host: String
     let port: Int
+    // Bumped when the encoder is relaunched with new capture settings, forcing
+    // the player view to tear down and reconnect its TCP stream.
+    var revision: Int = 0
 }
 
 struct H264StreamView: NSViewRepresentable {

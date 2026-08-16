@@ -1,3 +1,4 @@
+import type { CaptureSettings } from "./capture-settings";
 import type { CameraWorkspace, SessionStatus } from "./models";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -30,4 +31,15 @@ export function getSession(id: string): Promise<SessionStatus> {
 
 export function streamUrl(sessionId: string, cameraId: string): string {
   return `/api/sessions/${encodeURIComponent(sessionId)}/cameras/${encodeURIComponent(cameraId)}/stream.mp4`;
+}
+
+export function applyCameraSettings(
+  sessionId: string,
+  cameraId: string,
+  settings: CaptureSettings,
+): Promise<{ settings: CaptureSettings }> {
+  return request<{ settings: CaptureSettings }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/cameras/${encodeURIComponent(cameraId)}/settings`,
+    { method: "PUT", body: JSON.stringify(settings) },
+  );
 }

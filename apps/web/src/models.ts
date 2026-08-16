@@ -1,9 +1,12 @@
+import type { CaptureSettings } from "./capture-settings";
+
 export interface CameraEndpoint {
   id: string;
   name: string;
   host: string;
   username: string;
   port: number;
+  settings?: CaptureSettings;
 }
 
 export interface CameraWorkspace {
@@ -18,6 +21,7 @@ export interface CameraStatus {
   name: string;
   host: string;
   remotePort: number;
+  settings: CaptureSettings;
 }
 
 export interface SessionStatus {

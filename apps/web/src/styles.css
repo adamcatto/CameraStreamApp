@@ -114,6 +114,23 @@ input:focus { border-color: #62a1d0; background: #fff; }
 .stream-label strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .stream-label span { color: #99a8b3; font-size: 10px; }
 .stream-label .connected { color: #72d29b; }
+.stream-label .stream-actions { flex-direction: row; align-items: center; gap: 8px; }
+.stream-adjust { min-height: 26px; padding: 3px 9px; color: #d6dde3; border: 1px solid #3a454e; border-radius: 6px; background: #232c34; font-size: 11px; }
+.stream-adjust:hover { background: #2c3740; }
+.stream-adjust.active { color: #fff; border-color: var(--blue); background: var(--blue-dark); }
+.capture-panel { padding: 12px; color: #e8edf1; border-top: 1px solid #2a343d; background: #141a20; }
+.capture-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; font-size: 12px; }
+.capture-close { min-height: 22px; padding: 0 7px; color: #99a8b3; border: 1px solid #333e47; border-radius: 5px; background: transparent; }
+.capture-fields { display: grid; gap: 9px; }
+.capture-field { display: grid; grid-template-columns: 1fr; gap: 4px; }
+.capture-field-name { color: #b7c3cc; font-size: 11px; }
+.capture-field-name em { color: #7f8d97; font-style: normal; }
+.capture-field-controls { display: grid; grid-template-columns: 1fr 74px 44px; align-items: center; gap: 8px; }
+.capture-field-controls input[type="range"] { width: 100%; height: 4px; margin: 0; padding: 0; accent-color: var(--blue); background: transparent; box-shadow: none; }
+.capture-number { height: 28px; margin-top: 0; color: #e8edf1; border-color: #333e47; background: #1c242b; box-shadow: none; }
+.capture-value { color: #9fb0bb; font-size: 11px; font-variant-numeric: tabular-nums; text-align: right; }
+.capture-panel-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.capture-note { margin: 9px 0 0; color: #7f8d97; font-size: 10px; }
 .unavailable { margin-top: 18px; padding: 14px; border: 1px solid #ead0c4; border-radius: 9px; background: #fff8f5; }
 .unavailable > div { display: grid; grid-template-columns: 160px 1fr; gap: 12px; padding-top: 8px; }
 .unavailable span { font-size: 12px; font-weight: 600; }

@@ -28,9 +28,11 @@ namespace CameraStream.Windows.Views
                 return;
 
             _viewModel = vm;
+            _viewModel.ReloadRequested += OnReloadRequested;
 
             // rpicam-vid --listen accepts one TCP client per encoder. Do not connect
-            // until tunnels are ready, and never reconnect once playback starts.
+            // until tunnels are ready, and never reconnect once playback starts —
+            // except on an explicit reload after a capture-settings relaunch.
             if (vm.Host == "127.0.0.1")
             {
                 _startTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
@@ -64,6 +66,13 @@ namespace CameraStream.Windows.Views
             _mediaPlayer.Play(_media);
         }
 
+        private void OnReloadRequested(object? sender, EventArgs e)
+        {
+            // The encoder was relaunched with new capture settings; reconnect the
+            // player to pick up the new stream.
+            Dispatcher.Invoke(StartPlaybackOnce);
+        }
+
         private void StopStartTimer()
         {
             if (_startTimer == null)
@@ -76,6 +85,9 @@ namespace CameraStream.Windows.Views
         private void UserControl_Unloaded(object sender, RoutedEventArgs e)
         {
             StopStartTimer();
+
+            if (_viewModel != null)
+                _viewModel.ReloadRequested -= OnReloadRequested;
             _viewModel = null;
 
             _mediaPlayer?.Stop();

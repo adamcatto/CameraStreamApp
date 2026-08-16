@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import net from "node:net";
 import { Client, type ClientChannel, type ConnectConfig } from "ssh2";
+import {
+  type CaptureSettings,
+  defaultCaptureSettings,
+  libcameraArguments,
+  raspividArguments,
+  sanitizeCaptureSettings,
+} from "./capture-settings.js";
 import type { CameraEndpoint, CameraWorkspace, SessionRequest } from "./models.js";
 import { parseSshTarget } from "./models.js";
 
@@ -12,6 +19,7 @@ export interface CameraStatus {
   name: string;
   host: string;
   remotePort: number;
+  settings: CaptureSettings;
 }
 
 export interface SessionStatus {
@@ -104,11 +112,12 @@ export class SessionManager {
       workspaceName: session.workspace.name,
       jumpHost: session.workspace.jumpHost ?? null,
       streaming: session.streaming,
-      cameras: [...session.cameras.values()].map(({ id: cameraId, name, host, remotePort }) => ({
+      cameras: [...session.cameras.values()].map(({ id: cameraId, name, host, remotePort, settings }) => ({
         id: cameraId,
         name,
         host,
         remotePort,
+        settings,
       })),
       unavailable: session.unavailable,
       logs: session.logs,
@@ -140,6 +149,22 @@ export class SessionManager {
       }
     }
     throw new Error(`Encoder stream did not become available: ${safeMessage(lastError)}`);
+  }
+
+  /**
+   * Relaunch a single camera's encoder with new capture settings. The Pi camera
+   * stack has no live control channel, so applying settings kills and restarts
+   * that camera's encoder only; the browser reconnects its video element after.
+   */
+  async applySettings(sessionId: string, cameraId: string, settings: CaptureSettings): Promise<CaptureSettings> {
+    const session = this.requireSession(sessionId);
+    const camera = this.getCamera(sessionId, cameraId);
+    if (!session.streaming) throw new Error("This is a shell-only session.");
+    const sanitized = sanitizeCaptureSettings(settings);
+    await execute(camera.ssh, launchCommand(camera.remotePort, sanitized), 10_000);
+    camera.settings = sanitized;
+    this.log(session, `Applied capture settings to ${camera.name}; encoder relaunched on port ${camera.remotePort}.`);
+    return sanitized;
   }
 
   async openShell(sessionId: string, cameraId: string, columns = 100, rows = 30): Promise<ClientChannel> {
@@ -207,8 +232,9 @@ export class SessionManager {
         // A hostname is helpful but not required to stream.
       }
 
+      const settings = camera.settings ? sanitizeCaptureSettings(camera.settings) : { ...defaultCaptureSettings };
       if (startEncoder) {
-        await execute(ssh, launchCommand(remotePort), 10_000);
+        await execute(ssh, launchCommand(remotePort, settings), 10_000);
         this.log(session, `Encoder started on ${resolvedName} at port ${remotePort}.`);
       } else {
         this.log(session, `Shell connection ready for ${resolvedName}.`);
@@ -219,6 +245,7 @@ export class SessionManager {
         name: resolvedName,
         host: camera.host,
         remotePort,
+        settings,
         endpoint: camera,
         ssh,
       });
@@ -327,13 +354,13 @@ function execute(client: Client, command: string, timeoutMs: number): Promise<st
   });
 }
 
-function launchCommand(port: number): string {
+function launchCommand(port: number, settings: CaptureSettings): string {
   return `${stopCommand}; `
     + "if command -v rpicam-vid >/dev/null 2>&1; then c=$(command -v rpicam-vid); "
     + "elif command -v libcamera-vid >/dev/null 2>&1; then c=$(command -v libcamera-vid); "
     + "elif command -v raspivid >/dev/null 2>&1; then c=$(command -v raspivid); else exit 127; fi; "
-    + `if [ "\${c##*/}" = raspivid ]; then nohup "$c" -md 4 -ss 20000 -ISO 32 -w 1640 -h 1232 -fps 30 -ih -n -l -o tcp://0.0.0.0:${port} -t 0 >/tmp/camera-stream.log 2>&1 & `
-    + `else nohup "$c" --shutter 20000 --gain 32 --brightness 0.2 --width 1920 --height 1080 --codec h264 --framerate 30 --autofocus-mode auto --lens-position 3 --inline --listen -o tcp://0.0.0.0:${port} -t 0 >/tmp/camera-stream.log 2>&1 & fi; `
+    + `if [ "\${c##*/}" = raspivid ]; then nohup "$c" ${raspividArguments(settings)} -o tcp://0.0.0.0:${port} -t 0 >/tmp/camera-stream.log 2>&1 & `
+    + `else nohup "$c" ${libcameraArguments(settings)} -o tcp://0.0.0.0:${port} -t 0 >/tmp/camera-stream.log 2>&1 & fi; `
     + "printf '__CAMERA_STREAM_ENCODER_STARTED__\\n'";
 }
 

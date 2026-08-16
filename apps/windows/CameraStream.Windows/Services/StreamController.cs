@@ -26,6 +26,7 @@ namespace CameraStream.Windows.Services
         private string? _credentialFile;
         private readonly List<Process> _tunnels = new();
         private readonly Dictionary<Guid, int> _cameraSshPorts = new();
+        private readonly Dictionary<Guid, CameraSettings> _cameraSettings = new();
 
         private bool _isStreaming;
         private string _status = "Ready";
@@ -60,6 +61,9 @@ namespace CameraStream.Windows.Services
             await StopAsync();
             _cts = new CancellationTokenSource();
             _activeWorkspace = workspace;
+            _cameraSettings.Clear();
+            foreach (var camera in workspace.Cameras)
+                _cameraSettings[camera.Id] = (camera.Settings ?? CameraSettings.Default).Clamped();
             var sessionCredentials = GetCredentials(workspace);
             _credentialFile = AskpassHelper.CreateCredentialsFile(sessionCredentials);
             LogService.Write($"[credentials] loaded {sessionCredentials.Count} accounts for this session");
@@ -167,7 +171,7 @@ namespace CameraStream.Windows.Services
                             StreamPlayers.Clear();
                             foreach (var item in streamingCameras)
                             {
-                                StreamPlayers.Add(new StreamPlayerViewModel(
+                                StreamPlayers.Add(CreatePlayer(
                                     item.Camera.Id,
                                     item.Camera.Name,
                                     "127.0.0.1",
@@ -186,7 +190,7 @@ namespace CameraStream.Windows.Services
                             for (int i = 0; i < workspace.Cameras.Count; i++)
                             {
                                 var camera = workspace.Cameras[i];
-                                StreamPlayers.Add(new StreamPlayerViewModel(camera.Id, camera.Name, camera.Host, 8888 + i));
+                                StreamPlayers.Add(CreatePlayer(camera.Id, camera.Name, camera.Host, 8888 + i));
                             }
                         });
 
@@ -238,6 +242,7 @@ namespace CameraStream.Windows.Services
             _activeWorkspace = null;
             _credentialFile = null;
             _cameraSshPorts.Clear();
+            _cameraSettings.Clear();
             _tunnels.Clear();
 
             await _dispatcher.InvokeAsync(() =>
@@ -320,18 +325,96 @@ namespace CameraStream.Windows.Services
 
         private void Launch(CameraEndpoint camera, int index, string? jumpHost)
         {
-            _ssh.StartLaunch(camera, jumpHost, _credentialFile, BuildLaunchCommand(index),
+            _ssh.StartLaunch(camera, jumpHost, _credentialFile, BuildLaunchCommand(index, GetSettings(camera.Id)),
                 msg => LogService.Write($"[launch {camera.Address}] {msg}"));
         }
 
         private async Task<int> LaunchAndWaitAsync(CameraEndpoint camera, int index, int localSshPort, CancellationToken ct)
         {
-            var command = BuildLaunchCommand(index);
+            var command = BuildLaunchCommand(index, GetSettings(camera.Id));
             return await _ssh.RunCommandThroughTunnelAsync(camera, localSshPort, _credentialFile, command,
                 msg => LogService.Write($"[launch {camera.Address}] {msg}"), ct);
         }
 
-        private static string BuildLaunchCommand(int index)
+        private CameraSettings GetSettings(Guid id) =>
+            _cameraSettings.TryGetValue(id, out var settings) ? settings : CameraSettings.Default;
+
+        private StreamPlayerViewModel CreatePlayer(Guid id, string name, string host, int port) =>
+            new StreamPlayerViewModel(id, name, host, port, GetSettings(id).Clone(),
+                settings => ApplySettingsAsync(id, settings));
+
+        // Relaunch a single camera's encoder with new capture settings and ask
+        // its player to reconnect. The Pi camera stack has no live control
+        // channel, so this restarts only that camera's encoder.
+        private async Task ApplySettingsAsync(Guid cameraId, CameraSettings settings)
+        {
+            var workspace = _activeWorkspace;
+            var cts = _cts;
+            if (workspace == null || cts == null)
+                return;
+
+            var index = -1;
+            for (int i = 0; i < workspace.Cameras.Count; i++)
+            {
+                if (workspace.Cameras[i].Id == cameraId)
+                {
+                    index = i;
+                    break;
+                }
+            }
+
+            if (index < 0)
+                return;
+
+            var camera = workspace.Cameras[index];
+            var sanitized = settings.Clamped();
+            _cameraSettings[cameraId] = sanitized;
+            var command = BuildLaunchCommand(index, sanitized);
+
+            await SetStatusAsync($"Applying capture settings to {camera.Name}...");
+
+            try
+            {
+                if (!string.IsNullOrEmpty(workspace.JumpHost) && _cameraSshPorts.TryGetValue(cameraId, out var localSshPort))
+                {
+                    await _ssh.RunCommandThroughTunnelAsync(camera, localSshPort, _credentialFile, command,
+                        msg => LogService.Write($"[settings {camera.Address}] {msg}"), cts.Token);
+                }
+                else
+                {
+                    await _ssh.RunCommandAsync(camera, null, _credentialFile, command,
+                        msg => LogService.Write($"[settings {camera.Address}] {msg}"), cts.Token);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                LogService.Write($"[settings {camera.Address}] {ex.Message}");
+            }
+
+            // Give the relaunched encoder a moment to start listening before the
+            // player reconnects to it.
+            try
+            {
+                await Task.Delay(2500, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            await _dispatcher.InvokeAsync(() =>
+            {
+                var player = StreamPlayers.FirstOrDefault(p => p.Id == cameraId);
+                player?.RequestReload();
+                Status = $"Applied capture settings to {camera.Name}";
+            });
+        }
+
+        private static string BuildLaunchCommand(int index, CameraSettings settings)
         {
             var port = 8888 + index;
             return $"pkill -x libcamera-vid 2>/dev/null || true; " +
@@ -341,8 +424,8 @@ namespace CameraStream.Windows.Services
                    "elif command -v libcamera-vid >/dev/null 2>&1; then c=$(command -v libcamera-vid); " +
                    "elif command -v raspivid >/dev/null 2>&1; then c=$(command -v raspivid); " +
                    "else exit 127; fi; " +
-                   $"if [ \"${{c##*/}}\" = raspivid ]; then nohup \"$c\" -md 4 -ss 20000 -ISO 32 -w 1640 -h 1232 -fps 30 -ih -n -l -o tcp://0.0.0.0:{port} -t 0 >/tmp/camera-stream.log 2>&1 & " +
-                   $"else nohup \"$c\" --shutter 20000 --gain 32 --brightness 0.2 --width 1920 --height 1080 --codec h264 --framerate 30 --autofocus-mode auto --lens-position 3 --inline --listen -o tcp://0.0.0.0:{port} -t 0 >/tmp/camera-stream.log 2>&1 & fi; true";
+                   $"if [ \"${{c##*/}}\" = raspivid ]; then nohup \"$c\" {settings.RaspividArguments()} -o tcp://0.0.0.0:{port} -t 0 >/tmp/camera-stream.log 2>&1 & " +
+                   $"else nohup \"$c\" {settings.LibcameraArguments()} -o tcp://0.0.0.0:{port} -t 0 >/tmp/camera-stream.log 2>&1 & fi; true";
         }
 
         private async Task<List<JumpCamera>> OpenJumpHostTunnelsAsync(CameraWorkspace workspace, CancellationToken ct)

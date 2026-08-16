@@ -9,6 +9,7 @@ namespace CameraStream.Windows.Models
         public string Host { get; set; } = "";
         public string Username { get; set; } = "pi";
         public int Port { get; set; } = 8888;
+        public CameraSettings? Settings { get; set; }
 
         public string Address => $"{Username}@{Host}";
         public string CredentialAccount => $"{Username}@{Host}";

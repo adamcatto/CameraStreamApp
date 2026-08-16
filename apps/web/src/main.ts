@@ -1,7 +1,8 @@
 import "./styles.css";
-import { createSession, getSession, stopSession, streamUrl } from "./api";
+import { applyCameraSettings, createSession, getSession, stopSession, streamUrl } from "./api";
+import { captureFields, defaultCaptureSettings, sanitizeCaptureSettings, type CaptureSettings } from "./capture-settings";
 import { importCredentialFile, type CredentialImportResult } from "./credential-import";
-import { exampleWorkspace, normalizeWorkspaces, type CameraWorkspace, type SessionStatus } from "./models";
+import { exampleWorkspace, normalizeWorkspaces, type CameraStatus, type CameraWorkspace, type SessionStatus } from "./models";
 import { disposeTerminals, mountTerminals } from "./terminal";
 
 type View = "workspace" | "settings" | "stream";
@@ -19,6 +20,8 @@ let busy = false;
 let credentialIntent: PendingIntent | null = null;
 let terminalOpen = false;
 let credentialImportSummary: (Omit<CredentialImportResult, "credentials"> & { filename: string }) | null = null;
+let settingsCameraId: string | null = null;
+let settingsDraft: CaptureSettings | null = null;
 const revealedAccounts = new Set<string>();
 
 render();
@@ -86,6 +89,17 @@ app.addEventListener("click", async (event) => {
       render();
     } else if (action === "submit-credentials") {
       await submitCredentials();
+    } else if (action === "open-settings") {
+      openCameraSettings(button.dataset.id ?? "");
+    } else if (action === "close-settings") {
+      settingsCameraId = null;
+      settingsDraft = null;
+      render();
+    } else if (action === "reset-settings") {
+      settingsDraft = { ...defaultCaptureSettings };
+      render();
+    } else if (action === "apply-settings") {
+      await applyActiveSettings();
     } else if (action === "close-terminal") {
       terminalOpen = false;
       disposeTerminals();
@@ -121,6 +135,10 @@ app.addEventListener("input", (event) => {
   const input = event.target as HTMLInputElement;
   const field = input.dataset.field;
   if (!field) return;
+  if (field === "setting") {
+    handleSettingInput(input);
+    return;
+  }
   const workspace = selectedWorkspace();
   if (!workspace) return;
 
@@ -212,7 +230,7 @@ function render(): void {
         </section>
         <footer class="status-bar">
           <span class="status-light ${busy ? "working" : isStreaming ? "live" : ""}"></span>
-          <span>${html(status)}</span>
+          <span id="status-text">${html(status)}</span>
           ${session ? `<button data-action="show-logs">Connection log</button>` : ""}
           <span class="local-badge">Local gateway</span>
         </footer>
@@ -277,12 +295,136 @@ function renderStreams(): string {
       <div class="stream-grid">
         ${activeSession.cameras.map((camera) => `
           <article class="stream-card">
-            <video src="${attribute(streamUrl(activeSession.id, camera.id))}" autoplay muted playsinline></video>
-            <div class="stream-label"><div><strong>${html(camera.name)}</strong><span>${html(camera.host)}:${camera.remotePort}</span></div><span class="connected">Connected</span></div>
+            <video id="video-${attribute(camera.id)}" src="${attribute(streamUrl(activeSession.id, camera.id))}" autoplay muted playsinline></video>
+            <div class="stream-label">
+              <div><strong>${html(camera.name)}</strong><span>${html(camera.host)}:${camera.remotePort}</span></div>
+              <div class="stream-actions">
+                <span class="connected">Connected</span>
+                <button class="stream-adjust ${settingsCameraId === camera.id ? "active" : ""}" data-action="open-settings" data-id="${attribute(camera.id)}" title="Adjust capture settings" aria-label="Adjust capture settings for ${attribute(camera.name)}">⚙ Adjust</button>
+              </div>
+            </div>
+            ${settingsCameraId === camera.id ? renderCapturePanel(camera) : ""}
           </article>`).join("")}
       </div>
       ${activeSession.unavailable.length ? `<section class="unavailable"><h2>Unavailable cameras</h2>${activeSession.unavailable.map((camera) => `<div><span>${html(camera.name)}</span><small>${html(camera.reason)}</small></div>`).join("")}</section>` : ""}
     </div>`;
+}
+
+function renderCapturePanel(camera: CameraStatus): string {
+  const draft = settingsDraft ?? sanitizeCaptureSettings(camera.settings);
+  return `
+    <div class="capture-panel" data-settings-panel="${attribute(camera.id)}">
+      <div class="capture-panel-head"><strong>Capture settings</strong><button class="capture-close" data-action="close-settings" aria-label="Close capture settings">✕</button></div>
+      <div class="capture-fields">
+        ${captureFields.map((cfield) => {
+          const value = draft[cfield.key];
+          return `<div class="capture-field">
+            <span class="capture-field-name">${html(cfield.label)}${cfield.hint ? ` <em>${html(cfield.hint)}</em>` : ""}</span>
+            <span class="capture-field-controls">
+              <input type="range" data-field="setting" data-key="${cfield.key}" min="${cfield.min}" max="${cfield.max}" step="${cfield.step}" value="${value}" aria-label="${html(cfield.label)}" />
+              <input type="number" class="capture-number" data-field="setting" data-key="${cfield.key}" min="${cfield.min}" max="${cfield.max}" step="${cfield.step}" value="${value}" aria-label="${html(cfield.label)} value" />
+              <span class="capture-value" data-value="${cfield.key}">${html(formatSettingValue(cfield.key, value))}</span>
+            </span>
+          </div>`;
+        }).join("")}
+      </div>
+      <div class="capture-panel-actions">
+        <button data-action="reset-settings" ${busy ? "disabled" : ""}>Reset to defaults</button>
+        <button class="primary" data-action="apply-settings" ${busy ? "disabled" : ""}>${busy ? "Applying…" : "Apply"}</button>
+      </div>
+      <p class="capture-note">Applying relaunches this camera's encoder, so its video reconnects for a moment.</p>
+    </div>`;
+}
+
+function openCameraSettings(cameraId: string): void {
+  if (!session) return;
+  if (settingsCameraId === cameraId) {
+    settingsCameraId = null;
+    settingsDraft = null;
+    render();
+    return;
+  }
+  const camera = session.cameras.find((item) => item.id === cameraId);
+  if (!camera) return;
+  settingsCameraId = cameraId;
+  settingsDraft = sanitizeCaptureSettings(camera.settings);
+  render();
+}
+
+function handleSettingInput(input: HTMLInputElement): void {
+  if (!settingsDraft) return;
+  const key = input.dataset.key as keyof CaptureSettings | undefined;
+  if (!key) return;
+  const cfield = captureFields.find((item) => item.key === key);
+  if (!cfield) return;
+  let value = Number(input.value);
+  if (!Number.isFinite(value)) return;
+  value = Math.min(cfield.max, Math.max(cfield.min, value));
+  if (key === "shutterMicroseconds" || key === "framerate") value = Math.round(value);
+  settingsDraft[key] = value;
+  syncSettingInputs(key, value, input);
+}
+
+function syncSettingInputs(key: keyof CaptureSettings, value: number, source: HTMLInputElement): void {
+  if (!settingsCameraId) return;
+  const scope = document.querySelector(`[data-settings-panel="${settingsCameraId}"]`);
+  if (!scope) return;
+  scope.querySelectorAll<HTMLInputElement>(`input[data-key="${key}"]`).forEach((element) => {
+    if (element !== source && element.value !== String(value)) element.value = String(value);
+  });
+  const label = scope.querySelector(`[data-value="${key}"]`);
+  if (label) label.textContent = formatSettingValue(key, value);
+}
+
+function formatSettingValue(key: keyof CaptureSettings, value: number): string {
+  if (key === "shutterMicroseconds") return value === 0 ? "auto" : `${value}`;
+  if (key === "framerate") return `${value}`;
+  return value.toFixed(2);
+}
+
+async function applyActiveSettings(): Promise<void> {
+  if (!session || !settingsCameraId || !settingsDraft) return;
+  const activeSession = session;
+  const cameraId = settingsCameraId;
+  const draft = sanitizeCaptureSettings(settingsDraft);
+  // Apply without a full re-render so only the adjusted camera reconnects; the
+  // other live streams keep playing.
+  const applyButton = document.querySelector<HTMLButtonElement>(`[data-settings-panel="${cameraId}"] [data-action="apply-settings"]`);
+  if (applyButton) {
+    applyButton.disabled = true;
+    applyButton.textContent = "Applying…";
+  }
+  setStatus("Applying capture settings…");
+  try {
+    const { settings } = await applyCameraSettings(activeSession.id, cameraId, draft);
+    const camera = activeSession.cameras.find((item) => item.id === cameraId);
+    if (camera) camera.settings = settings;
+    if (settingsCameraId === cameraId) settingsDraft = settings;
+    reloadCameraVideo(activeSession.id, cameraId);
+    setStatus("Capture settings applied");
+  } catch (error) {
+    setStatus(`Error: ${error instanceof Error ? error.message : "could not apply settings"}`);
+  } finally {
+    if (applyButton) {
+      applyButton.disabled = false;
+      applyButton.textContent = "Apply";
+    }
+  }
+}
+
+function setStatus(message: string): void {
+  status = message;
+  const element = document.querySelector("#status-text");
+  if (element) element.textContent = message;
+}
+
+function reloadCameraVideo(sessionId: string, cameraId: string): void {
+  const video = document.querySelector<HTMLVideoElement>(`#video-${cameraId}`);
+  if (!video) return;
+  // A fresh query string forces the browser to reopen the stream and the
+  // gateway to reconnect to the relaunched encoder.
+  video.src = `${streamUrl(sessionId, cameraId)}?t=${Date.now()}`;
+  video.load();
 }
 
 function renderSettings(): string {
@@ -380,6 +522,8 @@ async function beginSession(intent: PendingIntent): Promise<void> {
   if (!workspace) return;
   if (session) await stopSession(session.id).catch(() => undefined);
   session = null;
+  settingsCameraId = null;
+  settingsDraft = null;
   busy = true;
   status = workspace.jumpHost ? `Connecting to jump host ${workspace.jumpHost}…` : `Connecting to ${workspace.cameras.length} cameras…`;
   if (intent === "stream") view = "stream";
@@ -404,6 +548,8 @@ async function stopActiveSession(): Promise<void> {
   if (!session) return;
   const closing = session;
   session = null;
+  settingsCameraId = null;
+  settingsDraft = null;
   busy = true;
   status = "Stopping camera encoders…";
   terminalOpen = false;
