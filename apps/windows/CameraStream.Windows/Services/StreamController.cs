@@ -368,21 +368,21 @@ namespace CameraStream.Windows.Services
 
             var camera = workspace.Cameras[index];
             var sanitized = settings.Clamped();
-            _cameraSettings[cameraId] = sanitized;
             var command = BuildLaunchCommand(index, sanitized);
 
             await SetStatusAsync($"Applying capture settings to {camera.Name}...");
 
+            int exitCode;
             try
             {
                 if (!string.IsNullOrEmpty(workspace.JumpHost) && _cameraSshPorts.TryGetValue(cameraId, out var localSshPort))
                 {
-                    await _ssh.RunCommandThroughTunnelAsync(camera, localSshPort, _credentialFile, command,
+                    exitCode = await _ssh.RunCommandThroughTunnelAsync(camera, localSshPort, _credentialFile, command,
                         msg => LogService.Write($"[settings {camera.Address}] {msg}"), cts.Token);
                 }
                 else
                 {
-                    await _ssh.RunCommandAsync(camera, null, _credentialFile, command,
+                    exitCode = await _ssh.RunCommandAsync(camera, null, _credentialFile, command,
                         msg => LogService.Write($"[settings {camera.Address}] {msg}"), cts.Token);
                 }
             }
@@ -393,7 +393,20 @@ namespace CameraStream.Windows.Services
             catch (Exception ex)
             {
                 LogService.Write($"[settings {camera.Address}] {ex.Message}");
+                await SetStatusAsync($"Could not apply capture settings to {camera.Name}");
+                return;
             }
+
+            // Only commit the new settings and reconnect if the relaunch actually
+            // succeeded; otherwise the encoder is still running the old arguments.
+            if (exitCode != 0)
+            {
+                LogService.Write($"[settings {camera.Address}] relaunch exited with status {exitCode}; keeping previous settings");
+                await SetStatusAsync($"Could not apply capture settings to {camera.Name}");
+                return;
+            }
+
+            _cameraSettings[cameraId] = sanitized;
 
             // Give the relaunched encoder a moment to start listening before the
             // player reconnects to it.

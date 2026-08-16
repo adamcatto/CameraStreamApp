@@ -77,10 +77,19 @@ final class StreamController: ObservableObject {
               let index = workspace.cameras.firstIndex(where: { $0.id == cameraID }) else { return }
         let camera = workspace.cameras[index]
         let sanitized = newSettings.clamped()
-        cameraSettings[cameraID] = sanitized
         status = "Applying capture settings to \(camera.name)…"
-        runSSH(camera, jumpHost: workspace.jumpHost, credentialFile: credentialFile, command: launchCommand(port: 8888 + index, settings: sanitized))
+        let command = launchCommand(port: 8888 + index, settings: sanitized)
         Task { @MainActor in
+            let exitStatus = await runSSHReportingStatus(camera, jumpHost: workspace.jumpHost, credentialFile: credentialFile, command: command, label: "settings \(camera.address)")
+            guard isStreaming else { return }
+            // Only commit the new settings and reconnect if the relaunch actually
+            // succeeded; otherwise the encoder is still running the old arguments.
+            guard exitStatus == 0 else {
+                writeLog("[settings \(camera.address)] relaunch exited with status \(exitStatus); keeping previous settings")
+                status = "Could not apply capture settings to \(camera.name)"
+                return
+            }
+            cameraSettings[cameraID] = sanitized
             try? await Task.sleep(for: .seconds(3))
             guard isStreaming else { return }
             if let endpointIndex = streamEndpoints.firstIndex(where: { $0.id == cameraID }) {
@@ -103,7 +112,7 @@ final class StreamController: ObservableObject {
         """
     }
 
-    private func runSSH(_ camera: CameraEndpoint, jumpHost: String?, credentialFile: URL? = nil, command: String) {
+    private func makeSSHProcess(_ camera: CameraEndpoint, jumpHost: String?, credentialFile: URL?, command: String) -> Process {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
         // Do not inherit ~/.ssh/config ControlMaster settings: reusable master
@@ -121,7 +130,38 @@ final class StreamController: ObservableObject {
             if let credentialFile { environment["CAMERA_STREAM_CREDENTIALS_FILE"] = credentialFile.path }
         }
         process.environment = environment
-        launch(process, label: "ssh \(camera.address)")
+        return process
+    }
+
+    private func runSSH(_ camera: CameraEndpoint, jumpHost: String?, credentialFile: URL? = nil, command: String) {
+        launch(makeSSHProcess(camera, jumpHost: jumpHost, credentialFile: credentialFile, command: command), label: "ssh \(camera.address)")
+    }
+
+    /// Runs an SSH command and resolves with its termination status, so a caller
+    /// can tell whether the remote command actually succeeded.
+    private func runSSHReportingStatus(_ camera: CameraEndpoint, jumpHost: String?, credentialFile: URL?, command: String, label: String) async -> Int32 {
+        let process = makeSSHProcess(camera, jumpHost: jumpHost, credentialFile: credentialFile, command: command)
+        return await withCheckedContinuation { continuation in
+            let pipe = Pipe()
+            process.standardError = pipe
+            process.standardOutput = pipe
+            pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+                let data = handle.availableData
+                guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
+                Task { @MainActor in self?.writeLog("[\(label)] \(text)") }
+            }
+            process.terminationHandler = { finished in
+                pipe.fileHandleForReading.readabilityHandler = nil
+                continuation.resume(returning: finished.terminationStatus)
+            }
+            do { try process.run() }
+            catch {
+                pipe.fileHandleForReading.readabilityHandler = nil
+                let message = error.localizedDescription
+                Task { @MainActor in self.writeLog("[\(label)] could not start: \(message)") }
+                continuation.resume(returning: -1)
+            }
+        }
     }
 
     private func openTunnel(to camera: CameraEndpoint, remotePort: Int, localPort: Int, jumpHost: String) {
