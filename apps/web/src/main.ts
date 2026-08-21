@@ -357,7 +357,9 @@ function handleSettingInput(input: HTMLInputElement): void {
   if (!key) return;
   const cfield = captureFields.find((item) => item.key === key);
   if (!cfield) return;
-  let value = Number(input.value);
+  // valueAsNumber is NaN for an empty number field mid-edit; ignore it rather
+  // than snapping the draft to 0 (which would read as "auto" for shutter).
+  let value = input.valueAsNumber;
   if (!Number.isFinite(value)) return;
   value = Math.min(cfield.max, Math.max(cfield.min, value));
   if (key === "shutterMicroseconds" || key === "framerate") value = Math.round(value);
