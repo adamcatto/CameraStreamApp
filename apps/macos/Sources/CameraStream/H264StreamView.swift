@@ -33,15 +33,75 @@ struct H264StreamView: NSViewRepresentable {
 }
 
 final class VideoView: NSView {
-    override func makeBackingLayer() -> CALayer { AVSampleBufferDisplayLayer() }
-    var displayLayer: AVSampleBufferDisplayLayer { layer as! AVSampleBufferDisplayLayer }
+    // The display layer is hosted as a sublayer so it can be replaced at runtime
+    // (removing and adding sublayers is fully supported) without tearing down
+    // the view or its stream connection.
+    private(set) var displayLayer = AVSampleBufferDisplayLayer()
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        displayLayer.videoGravity = .resizeAspect
-        displayLayer.backgroundColor = NSColor.black.cgColor
+        layer?.backgroundColor = NSColor.black.cgColor
+        configure(displayLayer)
+        displayLayer.frame = bounds
+        layer?.addSublayer(displayLayer)
+        observeFullScreenTransitions()
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    override func layout() {
+        super.layout()
+        // Sublayers do not auto-resize with the view, so keep the layer in sync.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        displayLayer.frame = bounds
+        CATransaction.commit()
+    }
+
+    private func configure(_ layer: AVSampleBufferDisplayLayer) {
+        layer.videoGravity = .resizeAspect
+        layer.backgroundColor = NSColor.black.cgColor
+    }
+
+    // Entering or leaving native full screen changes the window's backing/render
+    // context, which can leave AVSampleBufferDisplayLayer stalled (its status
+    // fails and it silently stops rendering). Replacing it with a fresh layer
+    // after the transition — while the TCP connection and this view stay alive —
+    // lets the ongoing stream resume on the next keyframe. Recreating the view
+    // instead would drop the socket, and a `--listen` encoder exits when its
+    // client disconnects, so every feed would go dark until relaunched.
+    private func observeFullScreenTransitions() {
+        let center = NotificationCenter.default
+        for name in [NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification] {
+            center.addObserver(self, selector: #selector(handleFullScreenTransition), name: name, object: nil)
+        }
+    }
+
+    @objc private func handleFullScreenTransition() {
+        guard window != nil else { return }
+        rebuildDisplayLayer()
+    }
+
+    /// Self-heal: if the display layer has failed (e.g. after a full-screen or
+    /// display change), replace it so the live stream resumes on the next
+    /// keyframe. Cheap enough to call before each enqueue.
+    func recoverIfNeeded() {
+        if displayLayer.status == .failed { rebuildDisplayLayer() }
+    }
+
+    private func rebuildDisplayLayer() {
+        displayLayer.removeFromSuperlayer()
+        let newLayer = AVSampleBufferDisplayLayer()
+        configure(newLayer)
+        newLayer.frame = bounds
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer?.addSublayer(newLayer)
+        CATransaction.commit()
+        displayLayer = newLayer
+    }
 }
 
 /// Receives the Annex-B H.264 stream emitted by rpicam-vid/libcamera-vid and
@@ -147,6 +207,10 @@ final class H264TCPPlayer: @unchecked Sendable {
         var sample: CMSampleBuffer?
         guard CMSampleBufferCreateReady(allocator: kCFAllocatorDefault, dataBuffer: block, formatDescription: formatDescription, sampleCount: 1, sampleTimingEntryCount: 1, sampleTimingArray: &timing, sampleSizeEntryCount: 1, sampleSizeArray: &size, sampleBufferOut: &sample) == noErr,
               let sample else { return }
-        DispatchQueue.main.async { [weak self] in self?.view?.displayLayer.enqueue(sample) }
+        DispatchQueue.main.async { [weak self] in
+            guard let view = self?.view else { return }
+            view.recoverIfNeeded()
+            view.displayLayer.enqueue(sample)
+        }
     }
 }
