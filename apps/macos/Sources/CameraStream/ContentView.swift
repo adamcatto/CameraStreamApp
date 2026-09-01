@@ -329,7 +329,7 @@ private struct StreamTile: View {
         VStack(spacing: 4) {
             ZStack(alignment: .topTrailing) {
                 H264StreamView(endpoint: endpoint)
-                    .id(endpoint.revision)
+                    .id("\(endpoint.revision)-\(streamer.layoutGeneration)")
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .clipShape(.rect(cornerRadius: 6))
                 HStack(spacing: 6) {

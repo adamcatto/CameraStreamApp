@@ -6,6 +6,12 @@ final class StreamController: ObservableObject {
     @Published var status = "Ready"
     @Published var isStreaming = false
     @Published var streamEndpoints: [StreamEndpoint] = []
+    // Bumped after every window full-screen transition. AppKit reparents the
+    // tiles' layers when entering/leaving full screen, which stalls
+    // AVSampleBufferDisplayLayer; folding this into each tile's identity forces
+    // the views to rebuild with fresh layers and reconnect so they recover.
+    @Published var layoutGeneration = 0
+    private var fullScreenObservers: [NSObjectProtocol] = []
     private var tunnels: [Process] = []
     private var activeWorkspace: CameraWorkspace?
     private var credentialFile: URL?
@@ -16,6 +22,16 @@ final class StreamController: ObservableObject {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory.appendingPathComponent("streaming.log")
     }()
+
+    init() {
+        let center = NotificationCenter.default
+        for name in [NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification] {
+            let token = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.layoutGeneration += 1 }
+            }
+            fullScreenObservers.append(token)
+        }
+    }
 
     func start(_ workspace: CameraWorkspace) {
         let cameras = workspace.cameras
