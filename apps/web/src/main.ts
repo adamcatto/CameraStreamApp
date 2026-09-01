@@ -22,6 +22,7 @@ let terminalOpen = false;
 let credentialImportSummary: (Omit<CredentialImportResult, "credentials"> & { filename: string }) | null = null;
 let settingsCameraId: string | null = null;
 let settingsDraft: CaptureSettings | null = null;
+let focusedCameraId: string | null = null;
 const revealedAccounts = new Set<string>();
 
 render();
@@ -89,6 +90,10 @@ app.addEventListener("click", async (event) => {
       render();
     } else if (action === "submit-credentials") {
       await submitCredentials();
+    } else if (action === "toggle-focus") {
+      toggleFocus(button.dataset.id ?? "");
+    } else if (action === "toggle-fullscreen") {
+      toggleFullscreen(button.dataset.id ?? "");
     } else if (action === "open-settings") {
       openCameraSettings(button.dataset.id ?? "");
     } else if (action === "close-settings") {
@@ -192,6 +197,15 @@ app.addEventListener("change", async (event) => {
   render();
 });
 
+window.addEventListener("keydown", (event) => {
+  // Escape leaves focus mode. When a tile is in native fullscreen the browser
+  // handles Escape itself, so only act when nothing is fullscreen.
+  if (event.key === "Escape" && focusedCameraId && !document.fullscreenElement) {
+    focusedCameraId = null;
+    applyFocusState();
+  }
+});
+
 window.addEventListener("beforeunload", () => {
   if (session) void fetch(`/api/sessions/${encodeURIComponent(session.id)}`, { method: "DELETE", keepalive: true });
 });
@@ -289,17 +303,19 @@ function renderEditor(workspace: CameraWorkspace): string {
 function renderStreams(): string {
   if (!session) return `<div class="center-message"><div class="spinner"></div><h2>Preparing camera connections</h2><p>The gateway is authenticating and starting reachable encoders.</p></div>`;
   const activeSession = session;
+  const hasFocus = focusedCameraId !== null && activeSession.cameras.some((camera) => camera.id === focusedCameraId);
   return `
-    <div class="stream-page">
+    <div class="stream-page ${hasFocus ? "has-focus" : ""}">
       <div class="stream-summary"><span class="live-pill"><i></i> LIVE</span><span>${activeSession.cameras.length}/${activeSession.cameras.length + activeSession.unavailable.length} cameras connected${activeSession.jumpHost ? ` through ${html(activeSession.jumpHost)}` : ""}</span></div>
       <div class="stream-grid">
         ${activeSession.cameras.map((camera) => `
-          <article class="stream-card">
+          <article class="stream-card ${focusedCameraId === camera.id ? "focused" : ""}" data-camera="${attribute(camera.id)}">
             <video id="video-${attribute(camera.id)}" src="${attribute(streamUrl(activeSession.id, camera.id))}" autoplay muted playsinline></video>
             <div class="stream-label">
               <div><strong>${html(camera.name)}</strong><span>${html(camera.host)}:${camera.remotePort}</span></div>
               <div class="stream-actions">
-                <span class="connected">Connected</span>
+                <button class="stream-icon-btn ${focusedCameraId === camera.id ? "active" : ""}" data-action="toggle-focus" data-id="${attribute(camera.id)}" title="${focusedCameraId === camera.id ? "Show all cameras" : "Expand this camera"}" aria-label="${focusedCameraId === camera.id ? "Show all cameras" : "Expand"} ${attribute(camera.name)}">${focusedCameraId === camera.id ? "⤡" : "⤢"}</button>
+                <button class="stream-icon-btn" data-action="toggle-fullscreen" data-id="${attribute(camera.id)}" title="Full screen" aria-label="Full screen ${attribute(camera.name)}">⛶</button>
                 <button class="stream-adjust ${settingsCameraId === camera.id ? "active" : ""}" data-action="open-settings" data-id="${attribute(camera.id)}" title="Adjust capture settings" aria-label="Adjust capture settings for ${attribute(camera.name)}">⚙ Adjust</button>
               </div>
             </div>
@@ -349,6 +365,42 @@ function openCameraSettings(cameraId: string): void {
   settingsCameraId = cameraId;
   settingsDraft = sanitizeCaptureSettings(camera.settings);
   render();
+}
+
+function toggleFocus(cameraId: string): void {
+  if (!session) return;
+  focusedCameraId = focusedCameraId === cameraId ? null : cameraId;
+  // Toggle classes directly instead of re-rendering so the other live tiles
+  // keep their video connections instead of reconnecting.
+  applyFocusState();
+}
+
+function applyFocusState(): void {
+  const page = document.querySelector<HTMLElement>(".stream-page");
+  if (!page) return;
+  page.classList.toggle("has-focus", focusedCameraId !== null);
+  page.querySelectorAll<HTMLElement>(".stream-card").forEach((card) => {
+    const isFocused = card.dataset.camera === focusedCameraId;
+    card.classList.toggle("focused", isFocused);
+    const focusButton = card.querySelector<HTMLButtonElement>('[data-action="toggle-focus"]');
+    if (focusButton) {
+      focusButton.classList.toggle("active", isFocused);
+      focusButton.textContent = isFocused ? "⤡" : "⤢";
+      focusButton.title = isFocused ? "Show all cameras" : "Expand this camera";
+    }
+  });
+}
+
+function toggleFullscreen(cameraId: string): void {
+  const card = document.querySelector<HTMLElement>(`.stream-card[data-camera="${cameraId}"]`);
+  if (!card) return;
+  if (document.fullscreenElement === card) {
+    void document.exitFullscreen().catch(() => undefined);
+  } else {
+    void card.requestFullscreen().catch(() => {
+      setStatus("Full screen was blocked by the browser");
+    });
+  }
 }
 
 function handleSettingInput(input: HTMLInputElement): void {
@@ -526,6 +578,7 @@ async function beginSession(intent: PendingIntent): Promise<void> {
   session = null;
   settingsCameraId = null;
   settingsDraft = null;
+  focusedCameraId = null;
   busy = true;
   status = workspace.jumpHost ? `Connecting to jump host ${workspace.jumpHost}…` : `Connecting to ${workspace.cameras.length} cameras…`;
   if (intent === "stream") view = "stream";
@@ -552,6 +605,7 @@ async function stopActiveSession(): Promise<void> {
   session = null;
   settingsCameraId = null;
   settingsDraft = null;
+  focusedCameraId = null;
   busy = true;
   status = "Stopping camera encoders…";
   terminalOpen = false;
