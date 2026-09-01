@@ -36,6 +36,21 @@ test("libcameraArguments omits --shutter when set to auto", () => {
   assert.doesNotMatch(args, /--shutter/);
 });
 
+test("default AWB gains stay automatic (no --awbgains)", () => {
+  assert.doesNotMatch(libcameraArguments(defaultCaptureSettings), /--awbgains/);
+  assert.doesNotMatch(raspividArguments(defaultCaptureSettings), /-awbg/);
+});
+
+test("manual AWB gains apply only when both red and blue are set", () => {
+  const both = sanitizeCaptureSettings({ awbRedGain: 1.5, awbBlueGain: 2 });
+  assert.match(libcameraArguments(both), /--awbgains 1\.5,2/);
+  assert.match(raspividArguments(both), /-awb off -awbg 1\.5,2/);
+
+  const redOnly = sanitizeCaptureSettings({ awbRedGain: 1.5 });
+  assert.doesNotMatch(libcameraArguments(redOnly), /--awbgains/);
+  assert.doesNotMatch(raspividArguments(redOnly), /-awbg/);
+});
+
 test("raspividArguments maps image controls onto raspivid scales", () => {
   const args = raspividArguments(defaultCaptureSettings);
   assert.match(args, /-ss 20000/);

@@ -104,6 +104,22 @@
 
                                         <StackPanel Margin="0,3">
                                             <DockPanel>
+                                                <TextBlock Text="AWB red gain (0 = auto)" Style="{StaticResource CaptureLabel}" DockPanel.Dock="Left" />
+                                                <TextBlock Text="{Binding Settings.AwbRedGain, StringFormat={}{0:0.#}}" Style="{StaticResource CaptureValue}" />
+                                            </DockPanel>
+                                            <Slider Minimum="0" Maximum="8" SmallChange="0.1" Value="{Binding Settings.AwbRedGain, Mode=TwoWay}" />
+                                        </StackPanel>
+
+                                        <StackPanel Margin="0,3">
+                                            <DockPanel>
+                                                <TextBlock Text="AWB blue gain (0 = auto)" Style="{StaticResource CaptureLabel}" DockPanel.Dock="Left" />
+                                                <TextBlock Text="{Binding Settings.AwbBlueGain, StringFormat={}{0:0.#}}" Style="{StaticResource CaptureValue}" />
+                                            </DockPanel>
+                                            <Slider Minimum="0" Maximum="8" SmallChange="0.1" Value="{Binding Settings.AwbBlueGain, Mode=TwoWay}" />
+                                        </StackPanel>
+
+                                        <StackPanel Margin="0,3">
+                                            <DockPanel>
                                                 <TextBlock Text="Brightness" Style="{StaticResource CaptureLabel}" DockPanel.Dock="Left" />
                                                 <TextBlock Text="{Binding Settings.Brightness, StringFormat={}{0:0.##}}" Style="{StaticResource CaptureValue}" />
                                             </DockPanel>

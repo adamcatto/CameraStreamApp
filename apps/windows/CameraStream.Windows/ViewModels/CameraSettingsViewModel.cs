@@ -9,6 +9,8 @@ namespace CameraStream.Windows.ViewModels
     {
         private double _shutter;
         private double _gain;
+        private double _awbRedGain;
+        private double _awbBlueGain;
         private double _brightness;
         private double _contrast;
         private double _saturation;
@@ -23,6 +25,8 @@ namespace CameraStream.Windows.ViewModels
 
         public double Shutter { get => _shutter; set => SetProperty(ref _shutter, value); }
         public double Gain { get => _gain; set => SetProperty(ref _gain, value); }
+        public double AwbRedGain { get => _awbRedGain; set => SetProperty(ref _awbRedGain, value); }
+        public double AwbBlueGain { get => _awbBlueGain; set => SetProperty(ref _awbBlueGain, value); }
         public double Brightness { get => _brightness; set => SetProperty(ref _brightness, value); }
         public double Contrast { get => _contrast; set => SetProperty(ref _contrast, value); }
         public double Saturation { get => _saturation; set => SetProperty(ref _saturation, value); }
@@ -34,6 +38,8 @@ namespace CameraStream.Windows.ViewModels
         {
             Shutter = settings.ShutterMicroseconds;
             Gain = settings.Gain;
+            AwbRedGain = settings.AwbRedGain;
+            AwbBlueGain = settings.AwbBlueGain;
             Brightness = settings.Brightness;
             Contrast = settings.Contrast;
             Saturation = settings.Saturation;
@@ -46,6 +52,8 @@ namespace CameraStream.Windows.ViewModels
         {
             ShutterMicroseconds = (int)Math.Round(Shutter),
             Gain = Gain,
+            AwbRedGain = AwbRedGain,
+            AwbBlueGain = AwbBlueGain,
             Brightness = Brightness,
             Contrast = Contrast,
             Saturation = Saturation,

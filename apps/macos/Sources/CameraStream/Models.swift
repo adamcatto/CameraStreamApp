@@ -7,6 +7,10 @@ import Foundation
 struct CaptureSettings: Codable, Hashable {
     var shutterMicroseconds: Int = 20000
     var gain: Double = 32
+    // 0 = automatic white balance. Manual AWB needs both gains, so they are only
+    // applied when both are greater than zero.
+    var awbRedGain: Double = 0
+    var awbBlueGain: Double = 0
     var brightness: Double = 0.2
     var contrast: Double = 1
     var saturation: Double = 1
@@ -20,6 +24,8 @@ struct CaptureSettings: Codable, Hashable {
         var value = self
         value.shutterMicroseconds = min(200_000, max(0, shutterMicroseconds))
         value.gain = min(64, max(1, gain))
+        value.awbRedGain = min(8, max(0, awbRedGain))
+        value.awbBlueGain = min(8, max(0, awbBlueGain))
         value.brightness = min(1, max(-1, brightness))
         value.contrast = min(2, max(0, contrast))
         value.saturation = min(2, max(0, saturation))
@@ -41,6 +47,9 @@ struct CaptureSettings: Codable, Hashable {
         var parts: [String] = []
         if settings.shutterMicroseconds > 0 { parts.append("--shutter \(settings.shutterMicroseconds)") }
         parts.append("--gain \(format(settings.gain))")
+        if settings.awbRedGain > 0, settings.awbBlueGain > 0 {
+            parts.append("--awbgains \(format(settings.awbRedGain)),\(format(settings.awbBlueGain))")
+        }
         parts.append("--brightness \(format(settings.brightness))")
         parts.append("--contrast \(format(settings.contrast))")
         parts.append("--saturation \(format(settings.saturation))")
@@ -60,6 +69,9 @@ struct CaptureSettings: Codable, Hashable {
         var parts = ["-md 4"]
         if settings.shutterMicroseconds > 0 { parts.append("-ss \(settings.shutterMicroseconds)") }
         parts.append("-ISO \(clampInt(settings.gain, 0, 1600))")
+        if settings.awbRedGain > 0, settings.awbBlueGain > 0 {
+            parts.append("-awb off -awbg \(format(settings.awbRedGain)),\(format(settings.awbBlueGain))")
+        }
         parts.append("-w 1640 -h 1232")
         parts.append("-fps \(settings.framerate)")
         parts.append("-br \(clampInt((settings.brightness + 1) * 50, 0, 100))")
@@ -69,6 +81,27 @@ struct CaptureSettings: Codable, Hashable {
         parts.append("-ev \(clampInt(settings.ev, -10, 10))")
         parts.append("-ih -n -l")
         return parts.joined(separator: " ")
+    }
+}
+
+extension CaptureSettings {
+    // Decode tolerantly: any missing field (e.g. settings written before a field
+    // existed, or a partial imported object) falls back to its default instead of
+    // failing the whole workspace decode.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        var value = CaptureSettings()
+        value.shutterMicroseconds = try container.decodeIfPresent(Int.self, forKey: .shutterMicroseconds) ?? value.shutterMicroseconds
+        value.gain = try container.decodeIfPresent(Double.self, forKey: .gain) ?? value.gain
+        value.awbRedGain = try container.decodeIfPresent(Double.self, forKey: .awbRedGain) ?? value.awbRedGain
+        value.awbBlueGain = try container.decodeIfPresent(Double.self, forKey: .awbBlueGain) ?? value.awbBlueGain
+        value.brightness = try container.decodeIfPresent(Double.self, forKey: .brightness) ?? value.brightness
+        value.contrast = try container.decodeIfPresent(Double.self, forKey: .contrast) ?? value.contrast
+        value.saturation = try container.decodeIfPresent(Double.self, forKey: .saturation) ?? value.saturation
+        value.sharpness = try container.decodeIfPresent(Double.self, forKey: .sharpness) ?? value.sharpness
+        value.ev = try container.decodeIfPresent(Double.self, forKey: .ev) ?? value.ev
+        value.framerate = try container.decodeIfPresent(Int.self, forKey: .framerate) ?? value.framerate
+        self = value
     }
 }
 

@@ -12,6 +12,10 @@ namespace CameraStream.Windows.Models
     {
         public int ShutterMicroseconds { get; set; } = 20000;
         public double Gain { get; set; } = 32;
+        // 0 = automatic white balance. Manual AWB needs both gains, so they are
+        // only applied when both are greater than zero.
+        public double AwbRedGain { get; set; } = 0;
+        public double AwbBlueGain { get; set; } = 0;
         public double Brightness { get; set; } = 0.2;
         public double Contrast { get; set; } = 1;
         public double Saturation { get; set; } = 1;
@@ -25,6 +29,8 @@ namespace CameraStream.Windows.Models
         {
             ShutterMicroseconds = ShutterMicroseconds,
             Gain = Gain,
+            AwbRedGain = AwbRedGain,
+            AwbBlueGain = AwbBlueGain,
             Brightness = Brightness,
             Contrast = Contrast,
             Saturation = Saturation,
@@ -37,6 +43,8 @@ namespace CameraStream.Windows.Models
         {
             ShutterMicroseconds = Math.Clamp(ShutterMicroseconds, 0, 200000),
             Gain = Math.Clamp(Gain, 1, 64),
+            AwbRedGain = Math.Clamp(AwbRedGain, 0, 8),
+            AwbBlueGain = Math.Clamp(AwbBlueGain, 0, 8),
             Brightness = Math.Clamp(Brightness, -1, 1),
             Contrast = Math.Clamp(Contrast, 0, 2),
             Saturation = Math.Clamp(Saturation, 0, 2),
@@ -54,6 +62,8 @@ namespace CameraStream.Windows.Models
             var parts = new List<string>();
             if (s.ShutterMicroseconds > 0) parts.Add($"--shutter {s.ShutterMicroseconds}");
             parts.Add($"--gain {Num(s.Gain)}");
+            if (s.AwbRedGain > 0 && s.AwbBlueGain > 0)
+                parts.Add($"--awbgains {Num(s.AwbRedGain)},{Num(s.AwbBlueGain)}");
             parts.Add($"--brightness {Num(s.Brightness)}");
             parts.Add($"--contrast {Num(s.Contrast)}");
             parts.Add($"--saturation {Num(s.Saturation)}");
@@ -74,6 +84,8 @@ namespace CameraStream.Windows.Models
             var parts = new List<string> { "-md 4" };
             if (s.ShutterMicroseconds > 0) parts.Add($"-ss {s.ShutterMicroseconds}");
             parts.Add($"-ISO {ClampInt(s.Gain, 0, 1600)}");
+            if (s.AwbRedGain > 0 && s.AwbBlueGain > 0)
+                parts.Add($"-awb off -awbg {Num(s.AwbRedGain)},{Num(s.AwbBlueGain)}");
             parts.Add("-w 1640 -h 1232");
             parts.Add($"-fps {s.Framerate}");
             parts.Add($"-br {ClampInt((s.Brightness + 1) * 50, 0, 100)}");

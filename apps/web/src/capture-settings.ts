@@ -4,6 +4,8 @@
 export interface CaptureSettings {
   shutterMicroseconds: number;
   gain: number;
+  awbRedGain: number;
+  awbBlueGain: number;
   brightness: number;
   contrast: number;
   saturation: number;
@@ -15,6 +17,8 @@ export interface CaptureSettings {
 export const defaultCaptureSettings: CaptureSettings = {
   shutterMicroseconds: 20000,
   gain: 32,
+  awbRedGain: 0,
+  awbBlueGain: 0,
   brightness: 0.2,
   contrast: 1,
   saturation: 1,
@@ -35,6 +39,8 @@ export interface CaptureField {
 export const captureFields: CaptureField[] = [
   { key: "shutterMicroseconds", label: "Shutter (µs)", min: 0, max: 200000, step: 500, hint: "0 = auto exposure" },
   { key: "gain", label: "Gain", min: 1, max: 64, step: 0.5 },
+  { key: "awbRedGain", label: "AWB red gain", min: 0, max: 8, step: 0.1, hint: "0 = auto white balance" },
+  { key: "awbBlueGain", label: "AWB blue gain", min: 0, max: 8, step: 0.1, hint: "0 = auto white balance" },
   { key: "brightness", label: "Brightness", min: -1, max: 1, step: 0.05 },
   { key: "contrast", label: "Contrast", min: 0, max: 2, step: 0.05 },
   { key: "saturation", label: "Saturation", min: 0, max: 2, step: 0.05 },

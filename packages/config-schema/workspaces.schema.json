@@ -18,6 +18,8 @@
       "properties": {
         "shutterMicroseconds": { "type": "integer", "minimum": 0, "maximum": 200000, "default": 20000, "description": "Exposure time in microseconds. 0 selects automatic exposure." },
         "gain": { "type": "number", "minimum": 1, "maximum": 64, "default": 32, "description": "Analogue sensor gain." },
+        "awbRedGain": { "type": "number", "minimum": 0, "maximum": 8, "default": 0, "description": "Manual white-balance red gain. 0 keeps automatic white balance; manual AWB applies only when both red and blue gains are greater than zero." },
+        "awbBlueGain": { "type": "number", "minimum": 0, "maximum": 8, "default": 0, "description": "Manual white-balance blue gain. 0 keeps automatic white balance; manual AWB applies only when both red and blue gains are greater than zero." },
         "brightness": { "type": "number", "minimum": -1, "maximum": 1, "default": 0.2 },
         "contrast": { "type": "number", "minimum": 0, "maximum": 2, "default": 1 },
         "saturation": { "type": "number", "minimum": 0, "maximum": 2, "default": 1 },

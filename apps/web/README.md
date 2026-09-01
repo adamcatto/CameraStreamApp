@@ -21,8 +21,10 @@ and does not prevent the other feeds from starting.
 ## Live capture settings
 
 Each live tile has an **Adjust** control that opens a per-camera panel for
-shutter, gain, brightness, contrast, saturation, sharpness, EV compensation, and
-frame rate. The Raspberry Pi camera stack accepts these only as launch
+shutter, gain, AWB red/blue gains, brightness, contrast, saturation, sharpness,
+EV compensation, and frame rate. The AWB gains default to 0 (automatic white
+balance); setting both switches the camera to manual white balance. The
+Raspberry Pi camera stack accepts these only as launch
 arguments, so **Apply** issues `PUT /api/sessions/:id/cameras/:cameraId/settings`,
 which relaunches just that camera's encoder with the new arguments; the tile then
 reconnects while the other feeds keep playing. Defaults reproduce the original

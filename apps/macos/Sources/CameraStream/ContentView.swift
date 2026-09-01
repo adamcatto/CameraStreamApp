@@ -398,6 +398,10 @@ private struct CaptureSettingsForm: View {
                       range: 0...200_000, step: 500,
                       display: settings.shutterMicroseconds == 0 ? "auto" : "\(settings.shutterMicroseconds)")
             sliderRow("Gain", value: $settings.gain, range: 1...64, step: 0.5)
+            sliderRow("AWB red gain", value: $settings.awbRedGain, range: 0...8, step: 0.1,
+                      display: settings.awbRedGain == 0 ? "auto" : String(format: "%.1f", settings.awbRedGain))
+            sliderRow("AWB blue gain", value: $settings.awbBlueGain, range: 0...8, step: 0.1,
+                      display: settings.awbBlueGain == 0 ? "auto" : String(format: "%.1f", settings.awbBlueGain))
             sliderRow("Brightness", value: $settings.brightness, range: -1...1, step: 0.05)
             sliderRow("Contrast", value: $settings.contrast, range: 0...2, step: 0.05)
             sliderRow("Saturation", value: $settings.saturation, range: 0...2, step: 0.05)

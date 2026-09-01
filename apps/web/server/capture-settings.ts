@@ -8,6 +8,8 @@
 export interface CaptureSettings {
   shutterMicroseconds: number;
   gain: number;
+  awbRedGain: number;
+  awbBlueGain: number;
   brightness: number;
   contrast: number;
   saturation: number;
@@ -19,6 +21,10 @@ export interface CaptureSettings {
 export const defaultCaptureSettings: CaptureSettings = {
   shutterMicroseconds: 20000,
   gain: 32,
+  // 0 = automatic white balance. Manual AWB needs both red and blue gains, so
+  // they are only applied when both are greater than zero.
+  awbRedGain: 0,
+  awbBlueGain: 0,
   brightness: 0.2,
   contrast: 1,
   saturation: 1,
@@ -36,6 +42,8 @@ interface FieldBounds {
 const bounds: Record<keyof CaptureSettings, FieldBounds> = {
   shutterMicroseconds: { min: 0, max: 200000, integer: true },
   gain: { min: 1, max: 64 },
+  awbRedGain: { min: 0, max: 8 },
+  awbBlueGain: { min: 0, max: 8 },
   brightness: { min: -1, max: 1 },
   contrast: { min: 0, max: 2 },
   saturation: { min: 0, max: 2 },
@@ -58,6 +66,8 @@ export function sanitizeCaptureSettings(value: unknown): CaptureSettings {
   return {
     shutterMicroseconds: clampField("shutterMicroseconds", raw.shutterMicroseconds),
     gain: clampField("gain", raw.gain),
+    awbRedGain: clampField("awbRedGain", raw.awbRedGain),
+    awbBlueGain: clampField("awbBlueGain", raw.awbBlueGain),
     brightness: clampField("brightness", raw.brightness),
     contrast: clampField("contrast", raw.contrast),
     saturation: clampField("saturation", raw.saturation),
@@ -76,8 +86,12 @@ function num(value: number): string {
 export function libcameraArguments(settings: CaptureSettings): string {
   const parts: string[] = [];
   if (settings.shutterMicroseconds > 0) parts.push(`--shutter ${settings.shutterMicroseconds}`);
+  parts.push(`--gain ${num(settings.gain)}`);
+  // Manual white balance needs both gains; otherwise leave AWB automatic.
+  if (settings.awbRedGain > 0 && settings.awbBlueGain > 0) {
+    parts.push(`--awbgains ${num(settings.awbRedGain)},${num(settings.awbBlueGain)}`);
+  }
   parts.push(
-    `--gain ${num(settings.gain)}`,
     `--brightness ${num(settings.brightness)}`,
     `--contrast ${num(settings.contrast)}`,
     `--saturation ${num(settings.saturation)}`,
@@ -99,8 +113,12 @@ function clampInt(value: number, min: number, max: number): number {
 export function raspividArguments(settings: CaptureSettings): string {
   const parts = ["-md 4"];
   if (settings.shutterMicroseconds > 0) parts.push(`-ss ${settings.shutterMicroseconds}`);
+  parts.push(`-ISO ${clampInt(settings.gain, 0, 1600)}`);
+  // raspivid takes manual white balance as -awb off plus -awbg red,blue.
+  if (settings.awbRedGain > 0 && settings.awbBlueGain > 0) {
+    parts.push(`-awb off -awbg ${num(settings.awbRedGain)},${num(settings.awbBlueGain)}`);
+  }
   parts.push(
-    `-ISO ${clampInt(settings.gain, 0, 1600)}`,
     `-w 1640 -h 1232`,
     `-fps ${settings.framerate}`,
     `-br ${clampInt((settings.brightness + 1) * 50, 0, 100)}`,
