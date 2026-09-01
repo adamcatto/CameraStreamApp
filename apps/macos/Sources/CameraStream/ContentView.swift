@@ -295,18 +295,32 @@ private struct SettingsCredentialRow: View {
 
 private struct StreamGrid: View {
     let endpoints: [StreamEndpoint]
+    @State private var focusedID: UUID?
+
     var body: some View {
-        ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 10)], spacing: 10) {
-                ForEach(endpoints) { endpoint in StreamTile(endpoint: endpoint) }
+        if let focusedID, let endpoint = endpoints.first(where: { $0.id == focusedID }) {
+            // A single camera fills the whole streaming area. Only this tile keeps
+            // a live connection; the grid tiles are torn down while focused.
+            StreamTile(endpoint: endpoint, isFocused: true) { self.focusedID = nil }
+                .padding()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 10)], spacing: 10) {
+                    ForEach(endpoints) { endpoint in
+                        StreamTile(endpoint: endpoint, isFocused: false) { focusedID = endpoint.id }
+                    }
+                }
+                .padding()
             }
-            .padding()
         }
     }
 }
 
 private struct StreamTile: View {
     let endpoint: StreamEndpoint
+    var isFocused: Bool = false
+    var onToggleFocus: () -> Void = {}
     @EnvironmentObject private var streamer: StreamController
     @State private var showSettings = false
     @State private var draft = CaptureSettings.default
@@ -318,29 +332,55 @@ private struct StreamTile: View {
                     .id(endpoint.revision)
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .clipShape(.rect(cornerRadius: 6))
-                Button {
-                    draft = streamer.settings(for: endpoint.id)
-                    showSettings = true
-                } label: {
-                    Image(systemName: "slider.horizontal.3")
-                        .padding(6)
-                        .background(.black.opacity(0.45), in: Circle())
-                        .foregroundStyle(.white)
+                HStack(spacing: 6) {
+                    tileButton(system: isFocused ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                               help: isFocused ? "Show all cameras" : "Expand this camera",
+                               action: onToggleFocus)
+                    tileButton(system: "macwindow",
+                               help: "Toggle window full screen",
+                               action: toggleWindowFullScreen)
+                    settingsButton
                 }
-                .buttonStyle(.plain)
                 .padding(6)
-                .help("Adjust capture settings")
-                .popover(isPresented: $showSettings, arrowEdge: .bottom) {
-                    CaptureSettingsForm(name: endpoint.name, settings: $draft) {
-                        streamer.applySettings(cameraID: endpoint.id, settings: draft)
-                        showSettings = false
-                    } onReset: {
-                        draft = .default
-                    }
-                }
             }
             Text("\(endpoint.name) · \(endpoint.host)").font(.caption).lineLimit(1)
         }
+    }
+
+    private var settingsButton: some View {
+        Button {
+            draft = streamer.settings(for: endpoint.id)
+            showSettings = true
+        } label: {
+            tileIcon("slider.horizontal.3")
+        }
+        .buttonStyle(.plain)
+        .help("Adjust capture settings")
+        .popover(isPresented: $showSettings, arrowEdge: .bottom) {
+            CaptureSettingsForm(name: endpoint.name, settings: $draft) {
+                streamer.applySettings(cameraID: endpoint.id, settings: draft)
+                showSettings = false
+            } onReset: {
+                draft = .default
+            }
+        }
+    }
+
+    private func tileButton(system: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) { tileIcon(system) }
+            .buttonStyle(.plain)
+            .help(help)
+    }
+
+    private func tileIcon(_ system: String) -> some View {
+        Image(systemName: system)
+            .padding(6)
+            .background(.black.opacity(0.45), in: Circle())
+            .foregroundStyle(.white)
+    }
+
+    private func toggleWindowFullScreen() {
+        (NSApp.keyWindow ?? NSApp.mainWindow)?.toggleFullScreen(nil)
     }
 }
 

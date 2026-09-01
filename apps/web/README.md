@@ -29,6 +29,11 @@ reconnects while the other feeds keep playing. Defaults reproduce the original
 hardcoded pipeline, so streams look identical until a value is changed. Settings
 are session-scoped and are not written to disk by the web client.
 
+Each tile also has an **expand** control (⤢) that focuses one camera so it fills
+the streaming area — the other tiles stay connected but hidden, so returning to
+the grid is instant — and a **full screen** control (⛶) that uses the browser
+Fullscreen API. `Esc` leaves either mode.
+
 ## Develop and run
 
 From the repository root:

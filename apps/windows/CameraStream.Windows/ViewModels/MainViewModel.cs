@@ -54,10 +54,44 @@ namespace CameraStream.Windows.ViewModels
         public bool IsStreaming => _streamer.IsStreaming;
         public string Status => _streamer.Status;
         public ObservableCollection<StreamPlayerViewModel> StreamPlayers => _streamer.StreamPlayers;
+
+        // The players shown in the stream area: every player normally, or just the
+        // focused one. Returning the live collection when unfocused keeps its
+        // add/remove notifications flowing to the grid; a single-item array while
+        // focused ensures only that one camera keeps a live connection.
+        public IEnumerable<StreamPlayerViewModel> DisplayedPlayers =>
+            FocusedPlayer is { } focused ? new[] { focused } : StreamPlayers;
+
         public CredentialStore CredentialStore => CredentialStore.Instance;
         public string BundledToolsStatus => BundledTools.GetToolStatus(_ssh);
 
+        private StreamPlayerViewModel? _focusedPlayer;
+        // When set, one camera fills the streaming area instead of the grid. Only
+        // the focused player keeps a live connection while focused.
+        public StreamPlayerViewModel? FocusedPlayer
+        {
+            get => _focusedPlayer;
+            private set
+            {
+                if (SetProperty(ref _focusedPlayer, value))
+                {
+                    OnPropertyChanged(nameof(IsFocused));
+                    OnPropertyChanged(nameof(IsGridMode));
+                    OnPropertyChanged(nameof(DisplayedPlayers));
+                    UpdateVisibility();
+                }
+            }
+        }
+
+        public bool IsFocused => FocusedPlayer != null;
+        public bool IsGridMode => FocusedPlayer == null;
+
+        // Raised by ToggleFullScreenCommand; the window handles the actual toggle.
+        public event EventHandler? FullScreenToggleRequested;
+
         public bool IsWorkspaceEditorVisible => !ShowSettings && !IsStreaming && SelectedWorkspace != null;
+        // The grid view stays visible in both layouts; focus is handled inside it
+        // by swapping DisplayedPlayers, so a single set of players stays connected.
         public bool IsStreamGridVisible => IsStreaming && !ShowSettings;
         public bool IsSettingsVisible => ShowSettings;
 
@@ -68,6 +102,9 @@ namespace CameraStream.Windows.ViewModels
         public RelayCommand StartStreamingCommand { get; }
         public RelayCommand StopStreamingCommand { get; }
         public RelayCommand ClearCredentialsCommand { get; }
+        public RelayCommand<StreamPlayerViewModel> FocusCameraCommand { get; }
+        public RelayCommand ShowAllCamerasCommand { get; }
+        public RelayCommand ToggleFullScreenCommand { get; }
 
         public MainViewModel()
         {
@@ -81,6 +118,9 @@ namespace CameraStream.Windows.ViewModels
 
                 if (e.PropertyName == nameof(StreamController.IsStreaming) || e.PropertyName == nameof(StreamController.Status))
                 {
+                    if (!_streamer.IsStreaming)
+                        FocusedPlayer = null;
+
                     UpdateVisibility();
                     UpdateCommands();
                 }
@@ -103,6 +143,16 @@ namespace CameraStream.Windows.ViewModels
             StartStreamingCommand = new RelayCommand(StartStreaming, () => SelectedWorkspace != null && !IsStreaming);
             StopStreamingCommand = new RelayCommand(StopStreaming, () => IsStreaming);
             ClearCredentialsCommand = new RelayCommand(ClearCredentials);
+            FocusCameraCommand = new RelayCommand<StreamPlayerViewModel>(player => FocusedPlayer = player);
+            ShowAllCamerasCommand = new RelayCommand(() => FocusedPlayer = null);
+            ToggleFullScreenCommand = new RelayCommand(() => FullScreenToggleRequested?.Invoke(this, EventArgs.Empty));
+        }
+
+        private void UpdateVisibility()
+        {
+            OnPropertyChanged(nameof(IsWorkspaceEditorVisible));
+            OnPropertyChanged(nameof(IsStreamGridVisible));
+            OnPropertyChanged(nameof(IsSettingsVisible));
         }
 
         private void WireWorkspace(WorkspaceViewModel wv)
@@ -198,13 +248,6 @@ namespace CameraStream.Windows.ViewModels
         {
             CredentialStore.Instance.Clear();
             OnPropertyChanged(nameof(BundledToolsStatus));
-        }
-
-        private void UpdateVisibility()
-        {
-            OnPropertyChanged(nameof(IsWorkspaceEditorVisible));
-            OnPropertyChanged(nameof(IsStreamGridVisible));
-            OnPropertyChanged(nameof(IsSettingsVisible));
         }
 
         private static void UpdateCommands()

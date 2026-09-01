@@ -23,6 +23,11 @@ that one camera's encoder and reconnects its tile; the other feeds keep playing.
 Defaults reproduce the original hardcoded pipeline, and the optional per-camera
 `settings` object is documented in `packages/config-schema`.
 
+Each live tile can also be enlarged: an **expand** control focuses one camera so
+it fills the streaming area (and back to the grid), and a **full screen** control
+uses the platform's native full screen. On the web the other tiles stay connected
+behind the focused one; the native clients keep a single connection while focused.
+
 ## Repository layout
 
 ```text

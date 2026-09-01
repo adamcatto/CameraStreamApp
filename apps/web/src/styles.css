@@ -118,6 +118,20 @@ input:focus { border-color: #62a1d0; background: #fff; }
 .stream-adjust { min-height: 26px; padding: 3px 9px; color: #d6dde3; border: 1px solid #3a454e; border-radius: 6px; background: #232c34; font-size: 11px; }
 .stream-adjust:hover { background: #2c3740; }
 .stream-adjust.active { color: #fff; border-color: var(--blue); background: var(--blue-dark); }
+.stream-icon-btn { display: grid; place-items: center; min-height: 26px; min-width: 30px; padding: 3px 6px; color: #d6dde3; border: 1px solid #3a454e; border-radius: 6px; background: #232c34; font-size: 13px; line-height: 1; }
+.stream-icon-btn:hover { background: #2c3740; }
+.stream-icon-btn.active { color: #fff; border-color: var(--blue); background: var(--blue-dark); }
+
+/* Focus mode: one tile fills the width while the others stay connected but hidden. */
+.stream-page.has-focus .stream-grid { display: block; }
+.stream-page.has-focus .stream-card:not(.focused) { display: none; }
+.stream-card.focused video { aspect-ratio: auto; height: min(72vh, calc(100vh - 250px)); }
+
+/* Native fullscreen: let the video fill the screen with the label as a footer. */
+.stream-card:fullscreen { display: flex; flex-direction: column; width: 100vw; height: 100vh; border-radius: 0; background: #000; }
+.stream-card:fullscreen video { flex: 1 1 auto; height: auto; min-height: 0; aspect-ratio: auto; }
+.stream-card:fullscreen .stream-label { flex: 0 0 auto; }
+.stream-card:fullscreen .capture-panel { flex: 0 0 auto; max-height: 42vh; overflow: auto; }
 .capture-panel { padding: 12px; color: #e8edf1; border-top: 1px solid #2a343d; background: #141a20; }
 .capture-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; font-size: 12px; }
 .capture-close { min-height: 22px; padding: 0 7px; color: #99a8b3; border: 1px solid #333e47; border-radius: 5px; background: transparent; }
