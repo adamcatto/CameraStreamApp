@@ -131,6 +131,28 @@ and XLSX. It matches account or workspace columns against existing workspaces
 without persisting passwords. See [apps/web/README.md](apps/web/README.md#credential-imports)
 for accepted layouts.
 
+## Share preloaded installers with lab members
+
+One command builds private macOS, Windows, and Linux installers with selected
+workspaces and their passwords already loaded, ready to upload to a restricted
+shared folder:
+
+```sh
+npm install
+./config/profiles/package-profile-bundles.sh --name "Kenny Lab" --only "IVSA,motioncage,mousemingle"
+```
+
+Workspaces come from the macOS app's saved workspaces (or
+`config/sandbox/workspaces.local.json`); passwords come from the gitignored
+`config/profiles/credentials.local.json`, and a template is generated on the
+first run. The output in `dist/profiles/Kenny-Lab/` is one zip per platform plus
+a `README - How to install.txt` for lab members. Each zip installs with a single
+double-click (macOS, Windows) or command (Linux). The macOS zip must be built on
+a Mac. The Windows zip needs the GitHub CLI (`gh auth login`) to download the
+credential-free CI build. Linux gets the web client with its own Node.js runtime,
+so nothing needs to be preinstalled. See
+[config/profiles/SHARING.md](config/profiles/SHARING.md).
+
 ## Security
 
 - Standard packages and committed examples contain no lab IPs or credentials.

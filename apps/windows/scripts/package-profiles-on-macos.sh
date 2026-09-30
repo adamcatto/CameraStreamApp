@@ -72,60 +72,7 @@ if ! python3 -m json.tool "$credentials_source" >/dev/null 2>&1; then
   exit 1
 fi
 
-if python3 - "$workspaces_source" "$credentials_source" "$bundle_file" <<'PY'
-import json, sys
-workspaces = json.load(open(sys.argv[1]))
-raw = json.load(open(sys.argv[2]))
-by_name = {}
-if isinstance(raw, list):
-    for entry in raw:
-        by_name[entry["workspaceName"]] = entry
-elif isinstance(raw, dict):
-    if "workspaces" in raw:
-        for name, entry in raw["workspaces"].items():
-            by_name[name] = {"workspaceName": name, **entry}
-    else:
-        by_name = {"__accounts__": raw}
-else:
-    raise SystemExit("Credentials file must be a JSON array or object.")
-
-if "__accounts__" in by_name:
-    account_credentials = by_name["__accounts__"]
-    if not account_credentials or any(not str(password).strip() for password in account_credentials.values()):
-        raise SystemExit("Account credentials file has missing passwords.")
-    json.dump(account_credentials, open(sys.argv[3], "w"), indent=2)
-    raise SystemExit(0)
-
-account_credentials = {}
-for workspace in workspaces:
-    name = workspace["name"]
-    entry = by_name.get(name)
-    if not entry:
-        raise SystemExit(f"Missing credentials entry for workspace: {name}")
-    camera_password = str(entry.get("cameraPassword", "")).strip()
-    if not camera_password:
-        raise SystemExit(f"Missing cameraPassword for workspace: {name}")
-    for camera in workspace.get("cameras", []):
-        username = camera.get("username", "pi")
-        host = camera.get("host", "")
-        if host:
-            account_credentials[f"{username}@{host}"] = camera_password
-    jump_host = workspace.get("jumpHost")
-    if jump_host:
-        jump_password = str(entry.get("jumpPassword", "")).strip()
-        if not jump_password:
-            raise SystemExit(f"Missing jumpPassword for workspace: {name}")
-        account_credentials[jump_host] = jump_password
-
-if not account_credentials:
-    raise SystemExit("No account credentials were generated.")
-json.dump(account_credentials, open(sys.argv[3], "w"), indent=2)
-PY
-then
-  :
-else
-  exit 1
-fi
+python3 "$repo_root/config/profiles/bundle-credentials.py" "$workspaces_source" "$credentials_source" "$bundle_file"
 
 download_dir=""
 selected_run_id=""

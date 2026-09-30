@@ -1,5 +1,5 @@
 import "./styles.css";
-import { applyCameraSettings, createSession, getSession, stopSession, streamUrl } from "./api";
+import { applyCameraSettings, createSession, getBundledProfile, getSession, stopSession, streamUrl } from "./api";
 import { captureFields, defaultCaptureSettings, sanitizeCaptureSettings, type CaptureSettings } from "./capture-settings";
 import { importCredentialFile, type CredentialImportResult } from "./credential-import";
 import { exampleWorkspace, normalizeWorkspaces, type CameraStatus, type CameraWorkspace, type SessionStatus } from "./models";
@@ -26,6 +26,7 @@ let focusedCameraId: string | null = null;
 const revealedAccounts = new Set<string>();
 
 render();
+void applyBundledProfile();
 
 app.addEventListener("click", async (event) => {
   const button = (event.target as HTMLElement).closest<HTMLElement>("[data-action]");
@@ -668,6 +669,31 @@ function uniqueAccounts(): Array<{ label: string; account: string }> {
     if (workspace.jumpHost) result.set(workspace.jumpHost, `${workspace.name} · Jump host`);
   }
   return [...result].map(([account, label]) => ({ account, label }));
+}
+
+// Private lab packages ship workspaces and passwords with the local gateway. Like the
+// native clients, bundled workspaces seed only a first run; bundled passwords are kept
+// in memory for this page and are never written to local storage.
+async function applyBundledProfile(): Promise<void> {
+  try {
+    const profile = await getBundledProfile();
+    if (!profile) return;
+    let firstRun = false;
+    try {
+      firstRun = localStorage.getItem(storageKey) === null;
+    } catch {
+      // Storage may be unavailable; keep the in-memory workspaces.
+    }
+    if (firstRun && profile.workspaces.length) {
+      workspaces = normalizeWorkspaces(profile.workspaces);
+      selectedId = workspaces[0]?.id ?? "";
+      saveWorkspaces();
+    }
+    credentials = { ...profile.credentials, ...credentials };
+    render();
+  } catch (error) {
+    setStatus(`Bundled profile unavailable: ${error instanceof Error ? error.message : "invalid profile"}`);
+  }
 }
 
 function loadWorkspaces(): CameraWorkspace[] {

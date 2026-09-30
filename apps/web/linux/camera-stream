@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Start the Camera Stream gateway in the background (if it is not already running)
+# and open the app in the default browser. `camera-stream --stop` stops the gateway.
+set -euo pipefail
+
+root="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+node="$root/runtime/node"
+port="${CAMERA_STREAM_WEB_PORT:-4173}"
+url="http://127.0.0.1:$port"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/camera-stream"
+log="$state_dir/gateway.log"
+pid_file="$state_dir/gateway.pid"
+
+notify() {
+  echo "$1" >&2
+  if [[ ! -t 2 ]]; then
+    if command -v zenity >/dev/null 2>&1; then zenity --error --title="Camera Stream" --text="$1" 2>/dev/null || true
+    elif command -v kdialog >/dev/null 2>&1; then kdialog --title "Camera Stream" --error "$1" 2>/dev/null || true
+    elif command -v notify-send >/dev/null 2>&1; then notify-send "Camera Stream" "$1" 2>/dev/null || true
+    fi
+  fi
+}
+
+healthy() {
+  "$node" -e 'fetch(process.argv[1]).then((r) => r.json()).then((b) => process.exit(b.ok ? 0 : 1), () => process.exit(1))' "$url/api/health" 2>/dev/null
+}
+
+stop_gateway() {
+  if [[ -f "$pid_file" ]]; then
+    local pid
+    pid="$(cat "$pid_file")"
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && grep -q "camera-stream\|index.mjs" "/proc/$pid/cmdline" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+      for _ in $(seq 1 50); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+    fi
+    rm -f "$pid_file"
+  fi
+}
+
+open_browser() {
+  if command -v xdg-open >/dev/null 2>&1 && xdg-open "$url" >/dev/null 2>&1; then
+    return
+  fi
+  echo "Open $url in your browser."
+}
+
+if [[ "${1:-}" == "--stop" ]]; then
+  stop_gateway
+  echo "Camera Stream stopped."
+  exit 0
+fi
+
+if [[ ! -x "$node" ]]; then
+  notify "Camera Stream is incomplete: $node is missing. Re-extract the zip and run the installer again."
+  exit 1
+fi
+
+mkdir -p "$state_dir"
+chmod 700 "$state_dir"
+
+if ! healthy; then
+  stop_gateway
+  CAMERA_STREAM_PROFILE_DIR="$root/app/profile" NODE_ENV=production \
+    nohup "$node" "$root/app/server/index.mjs" --production >>"$log" 2>&1 </dev/null &
+  echo $! >"$pid_file"
+  for _ in $(seq 1 100); do
+    healthy && break
+    if ! kill -0 "$(cat "$pid_file")" 2>/dev/null; then
+      notify "Camera Stream could not start. If port $port is in use, close the other program or set CAMERA_STREAM_WEB_PORT. Log: $log"
+      exit 1
+    fi
+    sleep 0.1
+  done
+  if ! healthy; then
+    notify "Camera Stream did not respond on $url. Log: $log"
+    exit 1
+  fi
+fi
+
+echo "Camera Stream is running at $url"
+echo "Stop it with: $root/camera-stream --stop (or log out)."
+open_browser

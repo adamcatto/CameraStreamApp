@@ -14,6 +14,18 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export interface BundledProfile {
+  workspaces: unknown[];
+  credentials: Record<string, string>;
+}
+
+export async function getBundledProfile(): Promise<BundledProfile | null> {
+  const response = await fetch("/api/profile");
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Bundled profile request failed (${response.status}).`);
+  return response.json() as Promise<BundledProfile>;
+}
+
 export function createSession(workspace: CameraWorkspace, credentials: Record<string, string>, startEncoders: boolean): Promise<SessionStatus> {
   return request<SessionStatus>("/api/sessions", {
     method: "POST",
