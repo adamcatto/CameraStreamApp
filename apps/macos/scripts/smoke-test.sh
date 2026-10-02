@@ -17,6 +17,7 @@ check test -x "$app/Contents/MacOS/CameraStream"
 check test -x "$app/Contents/MacOS/CameraSSHAskpass"
 check test -x "$app/Contents/Resources/bin/csshX"
 check grep -q '^#!/usr/bin/env perl' "$app/Contents/Resources/bin/csshX"
+check codesign --verify --deep --strict "$app"
 
 if [[ -f "$dmg" ]]; then
   check hdiutil verify "$dmg"

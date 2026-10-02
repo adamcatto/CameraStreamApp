@@ -97,6 +97,12 @@ if [[ -f "$app_root/Vendor/csshX-LICENSE" ]]; then
   cp "$app_root/Vendor/csshX-LICENSE" "$app/Contents/Resources/bin/csshX-LICENSE"
 fi
 
+# Seal the finished bundle. The linker's ad-hoc signature on the bare executable does not
+# cover Info.plist or Resources, and Gatekeeper reports such a downloaded app as "damaged".
+codesign --force --sign - "$app/Contents/MacOS/CameraSSHAskpass"
+codesign --force --sign - "$app"
+codesign --verify --deep --strict "$app"
+
 mkdir -p "$staging"
 cp -R "$app" "$staging/"
 cp "$repo_root/config/profiles/Install Profiles Camera Stream.command" "$staging/"
