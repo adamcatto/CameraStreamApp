@@ -48,3 +48,6 @@ node_modules/
 id_rsa*
 *.env
 .env.*
+
+# Web client bundled profile for local testing (contains passwords)
+apps/web/profile/

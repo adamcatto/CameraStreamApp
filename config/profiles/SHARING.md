@@ -1,5 +1,39 @@
 # Sharing the Profiles Camera Stream DMG
 
+## Quickest path: all platforms in one command
+
+```sh
+cd CameraStreamApp
+npm install
+./config/profiles/package-profile-bundles.sh --name "Kenny Lab" --only "IVSA,motioncage,mousemingle"
+```
+
+This writes `dist/profiles/Kenny-Lab/`:
+
+| File | Lab member does |
+|------|-----------------|
+| `CameraStream-Kenny-Lab-macOS.zip` | Extract, double-click **Install Camera Stream.command** |
+| `CameraStream-Kenny-Lab-Windows.zip` | Extract All, double-click **Install Profiles Camera Stream.bat** |
+| `CameraStream-Kenny-Lab-Linux.zip` | Extract, run `./"Install Camera Stream.sh"` (x64; no sudo, no Node or FFmpeg needed) |
+| `README - How to install.txt` | Step-by-step instructions, including Gatekeeper and SmartScreen prompts |
+
+`--only` accepts exact workspace names or a unique part of each, case-insensitively.
+Only those workspaces and the passwords they use are bundled. Use `--platforms
+linux,windows` to build a subset (for example on a machine without Xcode). If
+`config/profiles/credentials.local.json` is missing, the script writes a template
+for the selected workspaces and stops so you can fill in the passwords.
+
+**Google Drive:** upload into a folder shared with named lab members and leave
+*General access* set to **Restricted**. Never use "Anyone with the link".
+
+The Linux zip bundles the web client with a Node.js runtime and FFmpeg. Its
+gateway serves the bundled passwords only to pages on `127.0.0.1`, and the
+browser keeps them in memory only. Build it alone with
+`./apps/web/scripts/package-profiles-linux.sh [workspaces.json] [credentials.json]`
+(`CAMERA_STREAM_LINUX_ARCH=arm64` for ARM machines).
+
+---
+
 The Profiles build (`profiles-Camera-Stream.dmg`) includes selected workspaces **and passwords**. Treat it like a credential — share it privately, never commit it to git, and never upload it to a public link.
 
 ## Build the DMG (your Mac)

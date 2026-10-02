@@ -8,6 +8,7 @@ import ffmpegPath from "ffmpeg-static";
 import { WebSocketServer, type WebSocket } from "ws";
 import { sanitizeCaptureSettings } from "./capture-settings.js";
 import { validateSessionRequest } from "./models.js";
+import { loadBundledProfile, profileDirectory } from "./profile.js";
 import { SessionManager } from "./session-manager.js";
 
 const appRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -44,7 +45,7 @@ server.on("upgrade", (request, socket, head) => {
     if (production || request.url?.startsWith("/api/")) socket.destroy();
     return;
   }
-  if (!sameOrigin(request)) {
+  if (!sameOrigin(request) || !loopbackHost(request)) {
     socket.destroy();
     return;
   }
@@ -97,7 +98,7 @@ async function configureFrontend(): Promise<void> {
 }
 
 async function handleApi(request: IncomingMessage, response: ServerResponse): Promise<void> {
-  if (!sameOrigin(request)) {
+  if (!sameOrigin(request) || !loopbackHost(request)) {
     sendJson(response, 403, { error: "Requests must come from this local Camera Stream app." });
     return;
   }
@@ -105,6 +106,12 @@ async function handleApi(request: IncomingMessage, response: ServerResponse): Pr
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? `${host}:${port}`}`);
   if (request.method === "GET" && url.pathname === "/api/health") {
     sendJson(response, 200, { ok: true, ffmpeg: Boolean(ffmpegPath) });
+    return;
+  }
+  if (request.method === "GET" && url.pathname === "/api/profile") {
+    const profile = await loadBundledProfile(profileDirectory(appRoot));
+    if (profile) sendJson(response, 200, profile);
+    else sendJson(response, 404, { error: "No bundled profile." });
     return;
   }
   if (request.method === "POST" && url.pathname === "/api/sessions") {
@@ -228,6 +235,17 @@ function sameOrigin(request: IncomingMessage): boolean {
   if (!origin) return true;
   try {
     return new URL(origin).host === request.headers.host;
+  } catch {
+    return false;
+  }
+}
+
+// Rejects DNS-rebinding requests, whose Host header names the attacker's domain even
+// though the connection arrives on loopback.
+function loopbackHost(request: IncomingMessage): boolean {
+  try {
+    const { hostname } = new URL(`http://${request.headers.host ?? ""}`);
+    return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";
   } catch {
     return false;
   }

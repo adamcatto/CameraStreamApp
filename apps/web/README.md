@@ -60,6 +60,19 @@ the shared JSON format. Passwords remain in JavaScript and gateway memory only
 for the active session; they are not placed in local storage, output files, or
 logs. Closing a session stops the remote encoders and SSH connections.
 
+## Bundled profiles
+
+If the gateway finds `profiles-workspaces.json` and `profiles-credentials.json`
+in `CAMERA_STREAM_PROFILE_DIR` (default `apps/web/profile/`, which is gitignored),
+`GET /api/profile` returns them. The same files are used by the native clients.
+On first run, when the browser has no saved workspaces, the client seeds its
+workspaces from the profile. It loads the bundled passwords into session memory
+on every launch and never writes them to local storage. Like every other API
+route, the endpoint rejects cross-origin requests and requests whose `Host` is
+not loopback, which blocks DNS rebinding. `scripts/package-profiles-linux.sh`
+packages the client this way for Linux, with its own Node.js runtime and a
+per-user installer (`linux/`).
+
 ## Credential imports
 
 The Settings screen and password prompt accept `.json`, `.yaml`, `.yml`,

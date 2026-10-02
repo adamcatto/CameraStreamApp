@@ -85,6 +85,8 @@ See [apps/web/README.md](apps/web/README.md) for runtime details.
 
 Requires macOS 14+, Swift 6, `/usr/bin/ssh`, and `/usr/bin/perl`.
 
+The app currently builds for Apple Silicon (arm64) only; it does not run on Intel Macs.
+
 ```sh
 swift build --package-path apps/macos
 swift build -c release --package-path apps/macos
@@ -130,6 +132,28 @@ The web client's in-memory credential importer accepts JSON, YAML, CSV, TSV,
 and XLSX. It matches account or workspace columns against existing workspaces
 without persisting passwords. See [apps/web/README.md](apps/web/README.md#credential-imports)
 for accepted layouts.
+
+## Share preloaded installers with lab members
+
+One command builds private macOS, Windows, and Linux installers with selected
+workspaces and their passwords already loaded, ready to upload to a restricted
+shared folder:
+
+```sh
+npm install
+./config/profiles/package-profile-bundles.sh --name "Kenny Lab" --only "IVSA,motioncage,mousemingle"
+```
+
+Workspaces come from the macOS app's saved workspaces (or
+`config/sandbox/workspaces.local.json`); passwords come from the gitignored
+`config/profiles/credentials.local.json`, and a template is generated on the
+first run. The output in `dist/profiles/Kenny-Lab/` is one zip per platform plus
+a `README - How to install.txt` for lab members. Each zip installs with a single
+double-click (macOS, Windows) or command (Linux). The macOS zip must be built on
+a Mac. The Windows zip needs the GitHub CLI (`gh auth login`) to download the
+credential-free CI build. Linux gets the web client with its own Node.js runtime,
+so nothing needs to be preinstalled. See
+[config/profiles/SHARING.md](config/profiles/SHARING.md).
 
 ## Security
 
