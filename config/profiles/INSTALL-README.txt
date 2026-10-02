@@ -7,8 +7,11 @@ loaded. Please don't share them outside the lab.
 Before streaming, connect to the network or VPN that can reach the cameras.
 
 
-macOS: CameraStream-{{SLUG}}-macOS.zip
---------------------------------------
+macOS: CameraStream-{{SLUG}}-macOS.zip  (Apple Silicon only)
+---------------------------------------------------------
+The app runs only on Macs with Apple Silicon (M1 or newer), not on Intel Macs.
+To check, open the Apple menu > About This Mac and look for "Chip: Apple M...".
+
 1. Double-click the zip to extract it.
 2. Open the "Camera Stream ({{NAME}})" folder and double-click
    "Install Camera Stream.command". It copies the app to Applications and opens it.

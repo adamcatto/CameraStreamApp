@@ -85,6 +85,8 @@ See [apps/web/README.md](apps/web/README.md) for runtime details.
 
 Requires macOS 14+, Swift 6, `/usr/bin/ssh`, and `/usr/bin/perl`.
 
+The app currently builds for Apple Silicon (arm64) only; it does not run on Intel Macs.
+
 ```sh
 swift build --package-path apps/macos
 swift build -c release --package-path apps/macos
